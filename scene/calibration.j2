@@ -1,7 +1,7 @@
 # apc — CALIBRATION layout on the shared core_500 chassis.
 #
 # This is scene/layout.j2 with ONE change: the robot carries the probe rod
-# (probe_vertical_60) on the tool changer instead of the working suction
+# (probe_vertical_70) on the tool changer instead of the working suction
 # gripper. Everything else — anode, disc adapters, plates — is identical so
 # every recipe's IK (and therefore its calibration_name) matches production
 # exactly. Load it as [scene/core_500.j2, scene/calibration.j2].
@@ -9,10 +9,10 @@
 # Keep in sync with layout.j2 if the production layout moves a station.
 
 # ── Probe tool (calibration only) ───────────────────────────────────
-# probe_vertical_60 — the 60 mm vertical rod. Calibration solves IK to its
+# probe_vertical_70 — the 70 mm vertical rod. Calibration solves IK to its
 # "tcp" anchor; this is the only tool mounted for calibration.
-probe_vertical_60_1:
-  type: "probe_vertical_60"
+probe_vertical_70_1:
+  type: "probe_vertical_70"
   has_tool_changer: true
   attach:
     parent_name: "core"
