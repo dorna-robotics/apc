@@ -506,13 +506,11 @@ class Park(Action):
         return {"parked": (+parked(),)}
 
     def execute(self):
-        rt  = self.ctx.runtime
         rcp = self.ctx.recipes
-        # Move to the park pose, then cut motor. Recipe.park is a base
-        # move-to-joint (collision-aware + a checkpoint so Pause/Resume stays
-        # live); apc has no gripper/tool recipe, so we borrow "inspector".
+        # Move to the park pose. Recipe.park is a base move-to-joint
+        # (collision-aware + a checkpoint so Pause/Resume stays live); apc has
+        # no gripper/tool recipe, so we borrow "inspector".
         rcp["robot"].park(joint=self.PARK_JOINTS, has_motion_plan=True)
-        rt.motor(0)
         return "parked"
 
 
