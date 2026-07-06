@@ -236,14 +236,16 @@ class Start(Action):
         rt  = self.ctx.runtime
         rcp = self.ctx.recipes
         ws  = self.ctx.workspace
-        # Clean slate: sweep any disc_* component left over from a previous
-        # run that was killed / stopped mid-cycle. Such a disc (stranded in
-        # an out rack, on the anode, or on the gripper) stays in the scene
-        # forever otherwise — this is how stale discs pile up in the out
-        # racks across runs.
-        for name in [c for c in list(ws.components) if c.startswith("disc_")]:
-            ws.remove_component(name)
+        core = ws.components["core"]
         rt.motor(1)
+        # Home the rail before any move that assumes a homed axis. Same
+        # sequence startup.ipynb runs by hand: set_axis_with_stop configures
+        # the axis + PID and homes against the hard stop, but only if the
+        # rail isn't already homed (is_homed gate), so calling it every Start
+        # is cheap. No-ops in simulation (the SDK stubs return success).
+        if core.has_rail:
+            rt.step("homing rail")
+            rcp["robot"].set_axis_with_stop(core.rail_cfg, dir=-1)
         # Move to a known ready pose (Recipe.park is a base move-to-joint
         # on the generic component-less "robot" recipe).
         rcp["robot"].park(joint=self.START_JOINTS, has_motion_plan=True)
@@ -458,21 +460,6 @@ class Sort(Action):
 
     def execute(self, disc):
         rt, rcp, ws = self.ctx.runtime, self.ctx.recipes, self.ctx.workspace
-
-        # Self-heal: a disc whose sorted-fact is TRUE must not exist in the
-        # scene (it was deleted the moment it was placed). One can survive
-        # when a kill / error / operator-skip lands between place() and the
-        # delete — it then floats at its old stack height while newer discs
-        # stack through it. Sweep any such stragglers now.
-        facts = (getattr(self.ctx, "state", None) or {}).get("facts") or set()
-        for comp in [c for c in list(ws.components) if c.startswith("disc_")]:
-            try:
-                j = int(comp.split("_", 1)[1])
-            except ValueError:
-                ws.remove_component(comp)          # stray non-pipeline junk
-                continue
-            if j != disc and (sorted_.name, j) in facts:
-                ws.remove_component(comp)
 
         c = self.ctx.meta.get("disc_c", {}).get(disc)
         good = (c is not None) and (C_MIN <= c <= C_MAX)
