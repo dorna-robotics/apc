@@ -308,7 +308,7 @@ class Pick(Action):
         in_h, slot, _z = INVENTORY[disc]   # same position the disc was created at
         rt.step(f"disc {disc + 1}: pick from in_{in_h}[{slot}]")
         rt.step(_progress_pct(self), level="progress")
-        rcp[f"disc_in_{in_h}"].pick(slot, tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True)
+        rcp[f"disc_in_{in_h}"].pick(slot, tool_tcp_z_offset=PICK_TCP_Z, soft_approach=False)
         return "picked"
 
 
@@ -328,7 +328,7 @@ class Inspect(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: inspect")
         rt.step(_progress_pct(self), level="progress")
-        rcp["inspector"].present()
+        rcp["inspector"].present(approach=False)   # no gravity offset, no soft approach
         rcp["inspector"].detect()
         return "inspected"
 
@@ -351,7 +351,7 @@ class PlaceAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=True)
+        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False)
         return "on_anode"
 
 
@@ -439,7 +439,7 @@ class PickAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: pick off anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].pick("place", tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True)
+        rcp["anode"].pick("place", tool_tcp_z_offset=PICK_TCP_Z, soft_approach=False, approach=False)
         return "off_anode"
 
 

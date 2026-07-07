@@ -21,7 +21,8 @@ gripper_suction_1:
   has_tool_changer: true
   anchors:
     body:
-      tcp: [{{0+1.2}}, {{0+0.2}}, 139, 0, 0, 0] 
+      tcp: [0, 0, 139, 0, 0, 0]
+      tip: [0, 0, 139, 0, 0, 0]  
   attach:
     parent_name: "core"
     parent_solid: "tool_changer_robot_side"
@@ -83,6 +84,9 @@ cathode_1:
 # ── Inspection (horizontal vision station) ──────────────────────────
 inspection_horizontal_1:
   type: "inspection_horizontal"
+  anchors:
+    body:
+      place: [-9, 0, {{27-3.7+75+50}}, 0, 0, 0] 
   attach:
     parent_name: "fixture_plate_4"
     parent_solid: "body"
