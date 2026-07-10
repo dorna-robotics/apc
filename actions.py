@@ -238,14 +238,18 @@ class Start(Action):
         ws  = self.ctx.workspace
         core = ws.components["core"]
         rt.motor(1)
-        # Home the rail before any move that assumes a homed axis. Same
-        # sequence startup.ipynb runs by hand: set_axis_with_stop configures
-        # the axis + PID and homes against the hard stop, but only if the
-        # rail isn't already homed (is_homed gate), so calling it every Start
-        # is cheap. No-ops in simulation (the SDK stubs return success).
+        # Home the rail before any move that assumes a homed axis:
+        # set_axis_with_stop configures the axis + PID and homes against
+        # the hard stop — already-homed axes (and sim) short-circuit to
+        # True, so calling it every Start is cheap. A homing failure is
+        # FATAL: return the reserved "killed" outcome — the runtime is
+        # killed on the spot, nothing else runs, no motion ever happens
+        # on the unhomed rail. The operator must Reset / re-Launch.
         if core.has_rail:
             rt.step("homing rail")
-            rcp["robot"].set_axis_with_stop(core.rail_cfg, dir=-1)
+            if not rcp["robot"].set_axis_with_stop(core.rail_cfg):
+                rt.step("homing failed")
+                return "killed"
         # Move to a known ready pose (Recipe.park is a base move-to-joint
         # on the generic component-less "robot" recipe).
         rcp["robot"].park(joint=self.START_JOINTS, has_motion_plan=True)
