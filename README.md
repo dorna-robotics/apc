@@ -4,6 +4,21 @@ Custom BT project. Starts as a scaffold with just the canonical
 `Start` → `Park` shape; the workflow becomes meaningful as you add
 project-specific components, recipes, and per-item actions.
 
+## BK879B initialization
+
+Manual setup for the BK Precision 879B LCR meter before remote use:
+
+1. Hold **power** to turn on the meter.
+2. Hold the middle-right **UTIL** button until the utility menu appears.
+3. Menu opens on the beep option — press the **down arrow** to turn beep off.
+4. Press **UTIL** to cycle through the menu until you reach **AoFF** (auto-off).
+5. Press the **down arrow** until it reads **OFF**.
+6. Press the bottom-left **L/C/R/Z** button to return to the main menu.
+7. Verify there is a **C** in the top-left corner. If not, press **L/C/R/Z**
+   until it cycles to **C**.
+8. Press the top-middle **USB** button — **RMT** should flash in the
+   bottom-right of the screen. The meter is now in remote mode.
+
 ## Project layout
 
 ```
