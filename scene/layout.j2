@@ -32,8 +32,8 @@ gripper_suction_1:
 # device-guide §9: ls -d /dev/serial/by-id/* for the stable path).
 multi_meter_1:
   type: "multi_meter_bk879b"
-  port: ""
-  simulation: true
+  port: "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0"
+  simulation: false
   critical: true
   attach:
     parent_name: "fixture_plate_1"

@@ -95,7 +95,7 @@ GOOD_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
 BAD_HOLDERS  = ["disc_out_bad_1"]
 
 # Suction motion offsets (mirror the runtime example).
-PICK_TCP_Z   = -10                             # suction drives deeper to grab
+PICK_TCP_Z   = -5                             # suction drives deeper to grab
 PLACE_GRAV   = -5                              # suction presses on release
 
 _STEPS = 9                                     # per-disc steps for progress
