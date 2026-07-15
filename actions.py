@@ -396,7 +396,20 @@ class Measure(Action):
         rt.step(_progress_pct(self), level="progress")
         m = rcp["meter"].read_capacitance()
         if m is None:
-            rt.step(f"disc {disc + 1}: capacitance unavailable — will retry after recover")
+            # No implicit retry. A missing reading is an operator problem
+            # (meter unplugged, or knocked out of RMT mode), so pause and
+            # hand the run back to them. The disc stays clamped and the
+            # robot does not move: ``checkpoint`` blocks the workflow
+            # thread until Resume.
+            #
+            # We do NOT re-read here — returning False applies no effects,
+            # so ``~measured(disc)`` still holds and the planner re-drives
+            # Measure from observed state. Resume → this action runs again
+            # → still unavailable → pauses again. One read per execute().
+            rt.step(f"disc {disc + 1}: meter unavailable — reconnect the meter "
+                    f"(check RMT is on), then Resume")
+            rt.pause()
+            rt.checkpoint()          # blocks until the operator resumes
             return False
         # Stash the measured value on the ctx so Sort can read it without
         # a planning fact (it's per-disc runtime data, not plan state).
@@ -466,7 +479,14 @@ class Sort(Action):
         rt, rcp, ws = self.ctx.runtime, self.ctx.recipes, self.ctx.workspace
 
         c = self.ctx.meta.get("disc_c", {}).get(disc)
-        good = (c is not None) and (C_MIN <= c <= C_MAX)
+        if c is None:
+            # Unreachable by design: Measure blocks until it has a real
+            # reading, so every sorted disc has one. If this ever fires it's
+            # a logic bug (fact set without execute running) — fail loudly
+            # rather than silently binning a good disc as BAD.
+            rt.step(f"disc {disc + 1}: no capacitance recorded — cannot sort", level="error")
+            return False
+        good = C_MIN <= c <= C_MAX
         holders = GOOD_HOLDERS if good else BAD_HOLDERS
 
         filled = self.ctx.meta.setdefault("filled", {})   # holder → n dropped
