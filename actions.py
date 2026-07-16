@@ -503,7 +503,12 @@ class Sort(Action):
         # accumulates (no meshes/pickables piling up over ~3500 discs). The
         # fill counter, not the scene, tracks where the next disc goes.
         # place() re-attaches the held disc_<i> into the slot; remove it.
-        rcp[holder].place(slot, offset=[0, 0, z, 0, 0, 0], gravity_offset=PLACE_GRAV)
+        # soft_approach=False: Rack.place defaults it to True, which inserts
+        # an extra waypoint just above the slot. The disc stacks are shallow
+        # and the drop is straight down, so the extra waypoint buys nothing
+        # and costs time on every one of ~3500 discs. Matches the pick side.
+        rcp[holder].place(slot, offset=[0, 0, z, 0, 0, 0], gravity_offset=PLACE_GRAV,
+                          soft_approach=False)
         name = _disc(disc)
         if name in ws.components:
             ws.remove_component(name)
