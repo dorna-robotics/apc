@@ -252,7 +252,7 @@ class Start(Action):
                 return "killed"
         # Move to a known ready pose (Recipe.park is a base move-to-joint
         # on the generic component-less "robot" recipe).
-        rcp["robot"].park(joint=self.START_JOINTS, has_motion_plan=True)
+        rcp["robot"].park(joint=self.START_JOINTS)
         return "started"
 
 
@@ -539,7 +539,7 @@ class Park(Action):
         # Move to the park pose. Recipe.park is a base move-to-joint
         # (collision-aware + a checkpoint so Pause/Resume stays live); apc has
         # no gripper/tool recipe, so we borrow "inspector".
-        rcp["robot"].park(joint=self.PARK_JOINTS, has_motion_plan=True)
+        rcp["robot"].park(joint=self.PARK_JOINTS)
         return "parked"
 
 
