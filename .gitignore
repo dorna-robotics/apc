@@ -4,3 +4,4 @@ __pycache__/
 .ipynb_checkpoints/
 core.json
 core_ik.json
+core_path.json
