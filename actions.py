@@ -75,9 +75,15 @@ parked       = predicate("parked")
 #   hand_empty — the gripper holds one disc.
 #   anode_free — the anode/cathode station processes one disc.
 # See project-guide §8 "Single-occupancy resources".
-feed_free   = predicate("feed_free")     # in-feed has no un-picked disc
-hand_empty  = predicate("hand_empty")    # gripper holds no disc
-anode_free  = predicate("anode_free")    # anode/cathode station is idle
+#
+# capacity=True: shared mutual-exclusion facts, not causal ones —
+# see dsl.py's "Capacity facts" section. Without the flag the
+# scheduler ties precedence to whichever item's action the plan's
+# own linearization set the fact last, serializing items that
+# could otherwise be batched by tool.
+feed_free   = predicate("feed_free", capacity=True)     # in-feed has no un-picked disc
+hand_empty  = predicate("hand_empty", capacity=True)    # gripper holds no disc
+anode_free  = predicate("anode_free", capacity=True)    # anode/cathode station is idle
 
 
 # ── Exposed, tweakable parameters ─────────────────────────────────────
