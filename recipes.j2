@@ -14,43 +14,45 @@ robot:
 # NOTE: no tool-rack / gripper recipe here — the suction gripper is
 # mounted directly on the robot (no rack to pick/return it from).
 
-# Disc stations: padding 110 — solve says every exit must end >= 102
-# above the stack (the stack_holder box); hovers only need 32.
+# Disc stations: padding 55 — bench-tuned (110 from the solve min-end
+# read hovered too high and flipped the place IK branch). If "[plan]
+# START is inside the collision envelope" shows up after places, the
+# stack_holder boxes are the knob, not this number.
 # --- IN sources ---
 disc_in_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_in_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 110, speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {component: adapter_disc_in_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 disc_in_2:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_in_2, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 110, speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {component: adapter_disc_in_2, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # --- OUT good ---
 disc_out_good_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_good_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 110, speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {component: adapter_disc_out_good_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 disc_out_good_2:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_good_2, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 110, speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {component: adapter_disc_out_good_2, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # --- OUT bad (rejected) ---
 disc_out_bad_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_bad_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 110, speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {component: adapter_disc_out_bad_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # ── Stations ────────────────────────────────────────────────────────
 # Inspection — present the held disc to the camera + run detect().
 inspector:
   class: workspace.recipes.inspector.FixedInspector
-  kwargs: {component: inspection_horizontal_1, base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {}, speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {component: inspection_horizontal_1, base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {}, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # Anode — place/pick the disc on the anode's "place" anchor (Scale recipe
 # = base Recipe with target_anchor="place"; gives pick/place over a fixed
 # station, same as placing on the scale pan).
 anode:
   class: workspace.recipes.scale.Scale
-  kwargs: {component: anode_1, base_distance: 175, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {component: anode_1, base_distance: 175, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # Multimeter — read the disc's capacitance while it's clamped anode↔cathode.
 meter:
