@@ -21,38 +21,38 @@ robot:
 # --- IN sources ---
 disc_in_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_in_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_in_1, ref_joints: [-71.8, -27.9, -19.6, 0.0, -42.6, 108.2, 232.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 disc_in_2:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_in_2, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_in_2, ref_joints: [-59.0, -25.2, -26.6, 0.0, -38.2, 121.0, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # --- OUT good ---
 disc_out_good_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_good_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_out_good_1, ref_joints: [-54.7, -17.3, -52.9, 0.0, -19.8, 125.3, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 disc_out_good_2:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_good_2, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_out_good_2, ref_joints: [-49.2, -14.7, -68.1, 0.0, -7.2, 130.8, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # --- OUT bad (rejected) ---
 disc_out_bad_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_bad_1, left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_out_bad_1, ref_joints: [-42.3, -14.4, -78.4, 0.0, 2.8, 137.7, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 55, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # ── Stations ────────────────────────────────────────────────────────
 # Inspection — present the held disc to the camera + run detect().
 inspector:
   class: workspace.recipes.inspector.FixedInspector
-  kwargs: {component: inspection_horizontal_1, base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {}, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: inspection_horizontal_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {}, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # Anode — place/pick the disc on the anode's "place" anchor (Scale recipe
 # = base Recipe with target_anchor="place"; gives pick/place over a fixed
 # station, same as placing on the scale pan).
 anode:
   class: workspace.recipes.scale.Scale
-  kwargs: {component: anode_1, base_distance: 175, rail_step: 5, rail_span: 0, target_offset: [0, 0, 300, 0, 0, 0], speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: anode_1, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # Multimeter — read the disc's capacitance while it's clamped anode↔cathode.
 meter:
