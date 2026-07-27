@@ -139,11 +139,14 @@ def _disc(disc: int) -> str:
 
 # ── IN inventory ──────────────────────────────────────────────────────
 # Filled by setup() from the launch.yaml in_1 / in_2 lists (each 7 ints,
-# index i = discs stacked at anchor A<i+1>). INVENTORY[disc] = (holder,
-# slot, z): stacks are consumed TOP-first (depth n-1 → 0, z = depth ×
-# Z_STEP), slots A1→A7, in_1 until empty, then in_2. Module-level so the
-# per-disc actions (Create / Pick) can read their position; rebuilt on
-# every setup() call, so a replan stays consistent with the same kwargs.
+# index i = discs available at anchor A<i+1>). INVENTORY[disc] = (holder,
+# slot, z). Spring-feeder semantics: every disc PRESENTS at the tube's
+# top — z is the constant capacity height (MAX_PER_SLOT × Z_STEP), the
+# feeder lifts the stack so the pick point never moves. feed_free
+# guarantees one un-picked disc at a time, so the fixed position can
+# never double-occupy. Slots A1→A7, in_1 until empty, then in_2.
+# Module-level so Create / Pick can read positions; rebuilt on every
+# setup() call, so a replan stays consistent with the same kwargs.
 INVENTORY: list = []   # disc index → (in_holder, slot, z)
 
 
@@ -192,10 +195,11 @@ def setup(**kwargs):
     in_2 = _counts("in_2", [0] * len(SLOTS))
 
     INVENTORY.clear()
+    feed_z = round((MAX_PER_SLOT - 1) * Z_STEP, 3)    # the tube's top position
     for holder, counts in ((1, in_1), (2, in_2)):
         for s, n in enumerate(counts):
-            for depth in range(n - 1, -1, -1):        # top of the stack first
-                INVENTORY.append((holder, SLOTS[s], round(depth * Z_STEP, 3)))
+            for _ in range(n):
+                INVENTORY.append((holder, SLOTS[s], feed_z))
 
     discs = list(range(len(INVENTORY)))
 
@@ -263,8 +267,8 @@ class Start(Action):
 
 
 class Create(Action):
-    """Spawn the disc at its configured inventory position — the top of
-    the remaining stack at its in-holder anchor (z = depth × Z_STEP)."""
+    """Spawn the disc at the in-holder tube's TOP — the spring feeder
+    presents every disc at the constant capacity height."""
     params   = ["disc"]
     duration = 2
     resource = "robot"
