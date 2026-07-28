@@ -45,7 +45,7 @@ disc_out_bad_1:
 # Inspection — present the held disc to the camera + run detect().
 inspector:
   class: workspace.recipes.inspector.FixedInspector
-  kwargs: {component: inspection_horizontal_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {}, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: inspection_horizontal_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {display:   {label: 0, save_img: 1, save_img_roi: false}}, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
 # Anode — place/pick the disc on the anode's "place" anchor (Scale recipe
 # = base Recipe with target_anchor="place"; gives pick/place over a fixed
