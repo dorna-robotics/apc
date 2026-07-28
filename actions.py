@@ -89,7 +89,7 @@ anode_free  = predicate("anode_free", capacity=True)    # anode/cathode station 
 # ── Exposed, tweakable parameters ─────────────────────────────────────
 SLOTS       = [f"A{c}" for c in range(1, 7 + 1)]  # A1 .. A7, in order
 Z_STEP      = 0.254                            # per-disc stack lift (mm), in + out
-MAX_PER_SLOT = 225                             # discs per slot before next slot
+MAX_PER_SLOT = 255                             # discs per slot before next slot
 
 # Good/bad capacitance window (Farads). Defaulted WIDE so everything
 # currently lands in "good" — set the real spec later.
