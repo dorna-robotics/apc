@@ -199,3 +199,25 @@ stack_holder_disc_out_bad_1:
     child_solid: "body"
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
+
+collision_box_1:
+  type: "collision_box"
+  size: [100, 20, 20]
+  attach:
+    parent_name: "anode_1"
+    parent_solid: "body"
+    parent_anchor: "place"
+    child_solid: "body"
+    child_anchor: "center"
+    offset: [0, 0, 0, 0, 0, 0]
+
+collision_box_2:
+  type: "collision_box"
+  size: [20, 100, 20]
+  attach:
+    parent_name: "cathode_1"
+    parent_solid: "body"
+    parent_anchor: "center"
+    child_solid: "body"
+    child_anchor: "left"
+    offset: [0, 0, 0, 0, 0, 0]
