@@ -351,7 +351,7 @@ class Present(Action):
         return "presented"
 
 
-class Inspect(Action):
+class InspectBottom(Action):
     """Camera read at the station — a DEVICE READ with declarative
     retry (the scale pattern, project-guide §8): the success fact is
     asserted only on a valid reading; a failed read returns False so
@@ -370,7 +370,7 @@ class Inspect(Action):
 
     def execute(self, disc):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
-        rt.step(f"disc {disc + 1}: inspect")
+        rt.step(f"disc {disc + 1}: inspect bottom")
         rt.step(_progress_pct(self), level="progress")
         # ROI box rides the gripper TCP — the disc is in the hand; the
         # box is projected with this frame's camera_in_world.
@@ -407,7 +407,7 @@ class PlaceAnode(Action):
         return "on_anode"
 
 
-class InspectAnode(Action):
+class InspectTop(Action):
     """Robot-camera read of the seated disc, before the measurement —
     same declarative-retry contract as Inspect. ``hand_empty`` in the
     pre keeps the arm parked at the anode hover: the planner cannot
@@ -425,7 +425,7 @@ class InspectAnode(Action):
 
     def execute(self, disc):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
-        rt.step(f"disc {disc + 1}: inspect on anode")
+        rt.step(f"disc {disc + 1}: inspect top")
         rt.step(_progress_pct(self), level="progress")
         anode_body = self.ctx.workspace.components["anode_1"].assembly["body"]
         res = rcp["inspector_robot"].detect(
