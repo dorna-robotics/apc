@@ -408,7 +408,11 @@ class PlaceAnode(Action):
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
         rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False, exit=False)
-        rcp["anode"].stand("place", offset=self.VIEW_OFFSET)
+        # Unplanned straight line: the release pose sits inside the
+        # anode's inflated box (exit=False), so a planned hop cannot
+        # START here — this leg IS the exit, recipe-owned clearance.
+        rcp["anode"].stand("place", offset=self.VIEW_OFFSET,
+                           has_motion_plan=[False, "lmove"])
         return "on_anode"
 
 
