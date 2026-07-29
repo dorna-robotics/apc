@@ -47,6 +47,14 @@ inspector:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_horizontal_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {display: {label: 0, save_img: "/home/dorna/captures/apc/", save_img_roi: false}}, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
 
+# Robot-camera inspector — the core-mounted D405 (no component, no
+# motion surface): inspects the disc ON the anode right after placing,
+# before the measurement. ROI comes per-call from actions.py as a 3D
+# box on the anode place anchor, projected per frame (vision-guide §5).
+inspector_robot:
+  class: workspace.recipes.inspector.Inspector
+  kwargs: {detection_name: "anode_top", detection_preset: {display: {label: 0, save_img: "/home/dorna/captures/apc/", save_img_roi: false}}, speed_factor: {{ sf }}}
+
 # Anode — place/pick the disc on the anode's "place" anchor (Scale recipe
 # = base Recipe with target_anchor="place"; gives pick/place over a fixed
 # station, same as placing on the scale pan).

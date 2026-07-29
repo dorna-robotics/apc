@@ -100,6 +100,12 @@ C_MAX = 1.0e9
 GOOD_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
 BAD_HOLDERS  = ["disc_out_bad_1"]
 
+# Visual-inspection ROI: a 25x25x10 mm box over the disc, +20 px slack.
+# Horizontal station: box rides the gripper TCP (the disc is in hand).
+# Robot camera at the anode: box sits on the anode place anchor.
+INSPECT_BOX_WDH    = [25, 25, 10]
+INSPECT_ROI_OFFSET = 20
+
 # Suction motion offsets (mirror the runtime example).
 PICK_TCP_Z   = -5                             # suction drives deeper to grab
 PLACE_GRAV   = -5                              # suction presses on release
@@ -339,7 +345,13 @@ class Inspect(Action):
         rt.step(f"disc {disc + 1}: inspect")
         rt.step(_progress_pct(self), level="progress")
         rcp["inspector"].present(approach=False)   # no gravity offset, no soft approach
-        rcp["inspector"].detect()
+        # ROI box rides the gripper TCP — the disc is in the hand; the
+        # box is projected with this frame's camera_in_world.
+        tool = self.ctx.core.current_tool()
+        tcp = tool.assembly[next(iter(tool.assembly))].pose("tcp")
+        rcp["inspector"].detect(
+            roi={"box": [float(v) for v in tcp] + INSPECT_BOX_WDH,
+                 "offset": INSPECT_ROI_OFFSET})
         return "inspected"
 
 
@@ -362,6 +374,12 @@ class PlaceAnode(Action):
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
         rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False)
+        # Robot-camera visual inspection of the seated disc, before the
+        # measurement: ROI box on the anode's place anchor.
+        anode_body = self.ctx.workspace.components["anode_1"].assembly["body"]
+        rcp["inspector_robot"].detect(
+            roi={"box": [float(v) for v in anode_body.pose("place")] + INSPECT_BOX_WDH,
+                 "offset": INSPECT_ROI_OFFSET})
         return "on_anode"
 
 
