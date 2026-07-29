@@ -53,7 +53,7 @@ inspector:
 # box on the anode place anchor, projected per frame (vision-guide §5).
 inspector_robot:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {detection_name: "anode_top", detection_preset: {display: {label: 0, save_img: "/home/dorna/captures/apc/", save_img_roi: false}}, speed_factor: {{ sf }}}
+  kwargs: {detection_preset: {display: {label: 0, save_img: "/home/dorna/captures/apc/", save_img_roi: false}}, speed_factor: {{ sf }}}
 
 # Anode — place/pick the disc on the anode's "place" anchor (Scale recipe
 # = base Recipe with target_anchor="place"; gives pick/place over a fixed
