@@ -54,10 +54,12 @@ from workspace.bt import Action, predicate
 started      = predicate("started")
 created      = predicate("created")      # disc spawned at an in holder
 picked       = predicate("picked")       # disc in the gripper (off the in stack)
+presented    = predicate("presented")    # disc presented at the station
 inspected    = predicate("inspected")    # presented + detect() ran
 on_anode     = predicate("on_anode")     # disc placed on the anode
 cathode_down = predicate("cathode_down") # cylinder driven down (cathode contact)
 measured     = predicate("measured")     # capacitance read for this disc
+anode_inspected = predicate("anode_inspected")  # robot-camera check on the anode
 cathode_up   = predicate("cathode_up")   # cylinder retracted
 off_anode    = predicate("off_anode")    # disc re-gripped off the anode
 sorted_      = predicate("sorted")       # disc dropped into an out holder
@@ -110,7 +112,7 @@ INSPECT_ROI_OFFSET = 20
 PICK_TCP_Z   = -5                             # suction drives deeper to grab
 PLACE_GRAV   = -5                              # suction presses on release
 
-_STEPS = 9                                     # per-disc steps for progress
+_STEPS = 11                                    # per-disc steps for progress
 
 
 # ── Ordered-drop position — a simple counter ──────────────────────────
@@ -160,8 +162,9 @@ def _progress_pct(action):
     facts = ctx_state.get("facts") or set()
     done = 0
     for d in discs:
-        for p in (created, picked, inspected, on_anode, cathode_down,
-                  measured, cathode_up, off_anode, sorted_):
+        for p in (created, picked, presented, inspected, on_anode,
+                  anode_inspected, cathode_down, measured, cathode_up,
+                  off_anode, sorted_):
             if (p.name, d) in facts:
                 done += 1
     return int((done + 1) / total * 100)
@@ -328,14 +331,39 @@ class Pick(Action):
         return "picked"
 
 
-class Inspect(Action):
-    """Present the held disc to the inspection station and run detect()."""
+class Present(Action):
+    """Present the held disc at the horizontal inspection station (motion only)."""
     params   = ["disc"]
-    duration = 8
+    duration = 6
     resource = "robot"
 
     def pre(self, disc):
-        return picked(disc) & ~inspected(disc)
+        return picked(disc) & ~presented(disc)
+
+    def eff(self, disc):
+        return {"presented": (+presented(disc),)}
+
+    def execute(self, disc):
+        rt, rcp = self.ctx.runtime, self.ctx.recipes
+        rt.step(f"disc {disc + 1}: present")
+        rt.step(_progress_pct(self), level="progress")
+        rcp["inspector"].present(approach=False)   # no gravity offset, no soft approach
+        return "presented"
+
+
+class Inspect(Action):
+    """Camera read at the station — a DEVICE READ with declarative
+    retry (the scale pattern, project-guide §8): the success fact is
+    asserted only on a valid reading; a failed read returns False so
+    the planner re-selects this action after the operator recovers the
+    camera and resumes. A dead camera raises (CameraUnavailableError)
+    and pauses like any critical device."""
+    params   = ["disc"]
+    duration = 4
+    resource = "robot"
+
+    def pre(self, disc):
+        return presented(disc) & ~inspected(disc)
 
     def eff(self, disc):
         return {"inspected": (+inspected(disc),)}
@@ -344,14 +372,16 @@ class Inspect(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: inspect")
         rt.step(_progress_pct(self), level="progress")
-        rcp["inspector"].present(approach=False)   # no gravity offset, no soft approach
         # ROI box rides the gripper TCP — the disc is in the hand; the
         # box is projected with this frame's camera_in_world.
         tool = self.ctx.core.current_tool()
         tcp = tool.assembly[next(iter(tool.assembly))].pose("tcp")
-        rcp["inspector"].detect(
+        res = rcp["inspector"].detect(
             roi={"box": [float(v) for v in tcp] + INSPECT_BOX_WDH,
                  "offset": INSPECT_ROI_OFFSET})
+        if res is None:
+            rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
+            return False
         return "inspected"
 
 
@@ -374,13 +404,37 @@ class PlaceAnode(Action):
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
         rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False)
-        # Robot-camera visual inspection of the seated disc, before the
-        # measurement: ROI box on the anode's place anchor.
+        return "on_anode"
+
+
+class InspectAnode(Action):
+    """Robot-camera read of the seated disc, before the measurement —
+    same declarative-retry contract as Inspect. ``hand_empty`` in the
+    pre keeps the arm parked at the anode hover: the planner cannot
+    slot the next pick in between, so the camera is still over the
+    anode when this runs."""
+    params   = ["disc"]
+    duration = 4
+    resource = "robot"
+
+    def pre(self, disc):
+        return on_anode(disc) & hand_empty() & ~anode_inspected(disc)
+
+    def eff(self, disc):
+        return {"anode_inspected": (+anode_inspected(disc),)}
+
+    def execute(self, disc):
+        rt, rcp = self.ctx.runtime, self.ctx.recipes
+        rt.step(f"disc {disc + 1}: inspect on anode")
+        rt.step(_progress_pct(self), level="progress")
         anode_body = self.ctx.workspace.components["anode_1"].assembly["body"]
-        rcp["inspector_robot"].detect(
+        res = rcp["inspector_robot"].detect(
             roi={"box": [float(v) for v in anode_body.pose("place")] + INSPECT_BOX_WDH,
                  "offset": INSPECT_ROI_OFFSET})
-        return "on_anode"
+        if res is None:
+            rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")
+            return False
+        return "anode_inspected"
 
 
 class CathodeDown(Action):
@@ -390,7 +444,7 @@ class CathodeDown(Action):
     resource = "robot"
 
     def pre(self, disc):
-        return on_anode(disc) & ~cathode_down(disc)
+        return on_anode(disc) & anode_inspected(disc) & ~cathode_down(disc)
 
     def eff(self, disc):
         return {"cathode_down": (+cathode_down(disc),)}
