@@ -107,6 +107,7 @@ BAD_HOLDERS  = ["disc_out_bad_1"]
 # Robot camera at the anode: box sits on the anode place anchor.
 INSPECT_BOX_WDH    = [25, 25, 10]
 INSPECT_ROI_OFFSET = 20
+INSPECT_CROP       = True
 
 # Suction motion offsets (mirror the runtime example).
 PICK_TCP_Z   = -5                             # suction drives deeper to grab
@@ -378,7 +379,7 @@ class InspectBottom(Action):
         tcp = tool.assembly[next(iter(tool.assembly))].pose("tcp")
         res = rcp["inspector"].detect(
             roi={"box": [float(v) for v in tcp] + INSPECT_BOX_WDH,
-                 "offset": INSPECT_ROI_OFFSET})
+                 "offset": INSPECT_ROI_OFFSET, "crop": INSPECT_CROP})
         if res is None:
             rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
             return False
@@ -439,7 +440,7 @@ class InspectTop(Action):
         anode_body = self.ctx.workspace.components["anode_1"].assembly["body"]
         res = rcp["inspector_robot"].detect(
             roi={"box": [float(v) for v in anode_body.pose("place")] + INSPECT_BOX_WDH,
-                 "offset": INSPECT_ROI_OFFSET})
+                 "offset": INSPECT_ROI_OFFSET, "crop": INSPECT_CROP})
         if res is None:
             rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")
             return False
