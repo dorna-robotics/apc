@@ -386,7 +386,11 @@ class InspectBottom(Action):
 
 
 class PlaceAnode(Action):
-    """Place the disc on the anode's "place" anchor."""
+    """Place the disc on the anode's "place" anchor, then stand at
+    VIEW_OFFSET instead of the standard exit — up the old exit height
+    (the anode recipe's padding, 60) and 75 mm aside in Y, so the
+    robot camera has an unoccluded view of the disc for InspectTop."""
+    VIEW_OFFSET = [0, 75, 60, 0, 0, 0]   # anchor-frame [x, y, z, a, b, c]
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -403,7 +407,8 @@ class PlaceAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False)
+        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False, exit=False)
+        rcp["anode"].stand("place", offset=self.VIEW_OFFSET)
         return "on_anode"
 
 
