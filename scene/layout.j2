@@ -86,14 +86,6 @@ inspection_horizontal_1:
     ip: "10.0.1.40"
     port: 80
     focus: {mode: "manual", position: 112}
-    # Per-unit calibration (single-image, disc at the place anchor):
-    # fx/fy from the IDS datasheet (3.7mm/1.4um, FOV-confirmed); the
-    # principal point is where the on-axis disc actually appeared —
-    # the sensor sits ~0.4mm decentered under the lens, a constant
-    # pixel offset at every distance (unlike a lens-anchor shift).
-    K: [[2650.0, 0.0, 1234.0], [0.0, 2650.0, 664.0], [0.0, 0.0, 1.0]]
-    D: [0.0, 0.0, 0.0, 0.0, 0.0]
-    native_res: [2592, 1944]
   attach:
     parent_name: "fixture_plate_4"
     parent_solid: "body"
