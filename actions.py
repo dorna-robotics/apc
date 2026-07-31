@@ -102,11 +102,12 @@ C_MAX = 1.0e9
 GOOD_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
 BAD_HOLDERS  = ["disc_out_bad_1"]
 
-# Visual-inspection ROI: a 25x25x10 mm box over the disc, +20 px slack.
+# Visual-inspection ROI: a 25x25x10 mm box over the disc. The ROI offset
+# (px slack around the projected box) differs per station, so it lives on
+# each Inspect class (InspectBottom.ROI_OFFSET / InspectTop.ROI_OFFSET).
 # Horizontal station: box rides the gripper TCP (the disc is in hand).
 # Robot camera at the anode: box sits on the anode place anchor.
 INSPECT_BOX_WDH    = [25, 25, 10]
-INSPECT_ROI_OFFSET = 20
 INSPECT_CROP       = True
 
 # Suction motion offsets (mirror the runtime example).
@@ -359,6 +360,7 @@ class InspectBottom(Action):
     the planner re-selects this action after the operator recovers the
     camera and resumes. A dead camera raises (CameraUnavailableError)
     and pauses like any critical device."""
+    ROI_OFFSET = 40   # px slack around the projected box (station camera)
     params   = ["disc"]
     duration = 4
     resource = "robot"
@@ -379,7 +381,7 @@ class InspectBottom(Action):
         tcp = tool.assembly[next(iter(tool.assembly))].pose("tcp")
         res = rcp["inspector"].detect(
             roi={"box": [float(v) for v in tcp] + INSPECT_BOX_WDH,
-                 "offset": INSPECT_ROI_OFFSET, "crop": INSPECT_CROP})
+                 "offset": self.ROI_OFFSET, "crop": INSPECT_CROP})
         if res is None:
             rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
             return False
@@ -427,6 +429,7 @@ class InspectTop(Action):
     pre keeps the arm parked at the anode hover: the planner cannot
     slot the next pick in between, so the camera is still over the
     anode when this runs."""
+    ROI_OFFSET = 20   # px slack around the projected box (robot camera)
     params   = ["disc"]
     duration = 4
     resource = "robot"
@@ -444,7 +447,7 @@ class InspectTop(Action):
         anode_body = self.ctx.workspace.components["anode_1"].assembly["body"]
         res = rcp["inspector_robot"].detect(
             roi={"box": [float(v) for v in anode_body.pose("place")] + INSPECT_BOX_WDH,
-                 "offset": INSPECT_ROI_OFFSET, "crop": INSPECT_CROP})
+                 "offset": self.ROI_OFFSET, "crop": INSPECT_CROP})
         if res is None:
             rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")
             return False
