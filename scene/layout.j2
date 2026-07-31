@@ -86,6 +86,10 @@ inspection_horizontal_1:
     ip: "10.0.1.40"
     port: 80
     focus: {mode: "manual", position: 112}
+  anchors:
+    body:
+      # component bakes place at z = 25.4+140; raise it 10mm higher for this unit
+      place: [0, -3.75, {{ 25.4 + 140 + 10 }}, 0, 0, 0]
   attach:
     parent_name: "fixture_plate_4"
     parent_solid: "body"
