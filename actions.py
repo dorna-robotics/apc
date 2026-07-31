@@ -387,11 +387,12 @@ class InspectBottom(Action):
 
 
 class PlaceAnode(Action):
-    """Place the disc on the anode's "place" anchor, then stand at
-    VIEW_OFFSET instead of the standard exit — up the old exit height
-    (the anode recipe's padding, 60) and 75 mm aside in Y, so the
-    robot camera has an unoccluded view of the disc for InspectTop."""
+    """Place the disc on the anode's "place" anchor with a SHORT exit
+    (EXIT_CLEARANCE mm above the disc — the recipe's exit-leg number
+    form), then stand at VIEW_OFFSET so the robot camera has an
+    unoccluded view of the disc for InspectTop."""
     VIEW_OFFSET = [0, 75, 60, 0, 0, 0]   # anchor-frame [x, y, z, a, b, c]
+    EXIT_CLEARANCE = 10                  # mm above the placed disc
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -408,11 +409,13 @@ class PlaceAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False, exit=True)
-        # exit=True runs the recipe's standard straight-up exit first, which
-        # clears the anode's inflated box. The stand is then a straight lmove
-        # aside to the viewing pose — safe start (already clear of the box),
-        # so it stays unplanned.
+        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False,
+                           exit=self.EXIT_CLEARANCE)
+        # exit=<number> pulls off just EXIT_CLEARANCE mm above the disc
+        # (the approach keeps the recipe's full padding). That start may
+        # still be inside the anode's inflated box, so the stand to the
+        # viewing pose stays a deliberate unplanned straight lmove —
+        # this leg is the recipe-owned exit corridor.
         rcp["anode"].stand("place", offset=self.VIEW_OFFSET,
                            has_motion_plan=[False, "lmove"])
         return "on_anode"
