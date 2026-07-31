@@ -408,10 +408,11 @@ class PlaceAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False, exit=False)
-        # Unplanned straight line: the release pose sits inside the
-        # anode's inflated box (exit=False), so a planned hop cannot
-        # START here — this leg IS the exit, recipe-owned clearance.
+        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False, exit=True)
+        # exit=True runs the recipe's standard straight-up exit first, which
+        # clears the anode's inflated box. The stand is then a straight lmove
+        # aside to the viewing pose — safe start (already clear of the box),
+        # so it stays unplanned.
         rcp["anode"].stand("place", offset=self.VIEW_OFFSET,
                            has_motion_plan=[False, "lmove"])
         return "on_anode"
