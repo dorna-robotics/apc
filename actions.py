@@ -551,7 +551,7 @@ class PickAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: pick off anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].pick("place", tool_tcp_z_offset=PICK_TCP_Z, soft_approach=False, approach=False)
+        rcp["anode"].pick("place", tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, approach=True)
         return "off_anode"
 
 
