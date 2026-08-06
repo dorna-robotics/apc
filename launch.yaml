@@ -22,7 +22,7 @@ checks:       checks.py
 plan_window:  4
 scheduler:    cpsat
 
-kwargs:
+default:
   in_1:
     type: list
     default: [1, 1, 1, 1, 1, 1, 1]
