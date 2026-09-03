@@ -257,16 +257,29 @@ function render(wrap, st) {
 // mount alone — one observer per modal, kept for the life of the page,
 // re-fits on every show and restores the platform's width on every hide,
 // so nothing leaks into another screen shown in the same modal.
+//
+// The same observer hides the modal's LOAD button while this screen is
+// up. Load is platform chrome that fills the GENERIC form's fields from
+// a file; a project screen has none, so for apc it could only ever say
+// "No matching parameters found". A control that cannot do anything has
+// no place on the operator's window. Restored on hide, like the width.
 const MODAL_CHROME_PX = 44;   // .modal-body padding (20+20) + borders
 const CARD_PAD_PX     = 30;   // .card padding (14+14) + border
 const SLACK_PX        = 36;   // the scroll padding + a margin, so nothing
                               // the cursor does can widen the content
+
+function showLoadButton(modal, on) {
+  const btn = (modal && modal.querySelector && modal.querySelector("#btnParamsLoad"))
+    || (typeof document !== "undefined" && document.getElementById("btnParamsLoad"));
+  if (btn && btn.style) btn.style.display = on ? "" : "none";
+}
 
 function fitModalTo(root, wrap) {
   const holder = root && root.host;
   if (!holder || typeof holder.closest !== "function") return;
   const modal = holder.closest(".modal");
   if (!modal || !modal.style) return;
+  showLoadButton(modal, false);
   // The latest screen in this modal — a remount (Reset All, new values)
   // replaces the wrapper, and the observer below must measure the live one.
   modal._apcFit = { root, wrap };
@@ -293,6 +306,7 @@ function fitModalTo(root, wrap) {
       } else {
         modal.style.width = modal.dataset.apcPrevW || "";
         modal.style.maxWidth = modal.dataset.apcPrevM || "";
+        showLoadButton(modal, true);
       }
     });
     obs.observe(overlay, { attributes: true, attributeFilter: ["class"] });
