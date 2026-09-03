@@ -76,6 +76,10 @@ const CSS = kitCss + wellCss({
 /* everything in a card sits centred, the bench included */
 .hmi.apc .card .inner { align-items:center; }
 .hmi.apc .card > h4 { text-align:center; }
+/* room for a hovered circle (the kit scales it 1.06) to grow WITHOUT
+   spilling out of the scroll wrapper — a spill adds a scrollbar and the
+   whole screen jumps under the cursor */
+.hmi.apc .scroll { padding:6px; }
 /* the bench: five holder rows in one grid, A1 on the left */
 .hmi .rack.disc { grid-template-columns:${GUTTER}px repeat(${SLOTS_N}, ${CELL}px);
   gap:${GAP}px; justify-content:center; }
@@ -120,40 +124,24 @@ function flags(raw) {
   return out;
 }
 
-// ── validation — always live, three tones ──────────────────────────────
+// ── validation — always live ───────────────────────────────────────────
+// ONE message box, always one line, so a click never changes the
+// screen's height: the modal is centred vertically by the platform, and
+// a taller screen would shift the bench under the operator's cursor.
 function check(st) {
-  const errs = [], notes = [];
-  // Loaded positions in the order setup() consumes them: in_1 A1→A7, then in_2.
+  const errs = [];
   const full = [];
-  for (const h of IN_HOLDERS.slice().reverse()) {
+  for (const h of IN_HOLDERS) {
     st.in[h.key].forEach((f, i) => { if (f) full.push({ h, i }); });
   }
-  if (!full.length) errs.push("No discs loaded — click the In positions that hold a stack.");
-  if (full.length) {
-    const order = IN_HOLDERS.slice().reverse().map(h => {
-      const s = full.filter(f => f.h === h).map(f => SLOTS[f.i]);
-      return s.length ? `${h.label} ${s.join(", ")}` : null;
-    }).filter(Boolean).join(" · ");
-    notes.push(`Runs ${order}, in that order. Passed discs go to Pass 1 then Pass 2; ` +
-      `failed discs go to Fail.`);
-  }
-  return { errs, notes, full };
+  if (!full.length) errs.push("No discs loaded — click the In stacks that are full.");
+  return { errs, full };
 }
 
 function msgHtml(V) {
-  let h = "";
-  if (V.errs.length) {
-    h += `<div class="msg m-bad"><b>${V.errs.length} blocking</b><div><ul>` +
-      V.errs.map(e => `<li>${esc(e)}</li>`).join("") + `</ul></div></div>`;
-  } else {
-    h += `<div class="msg m-good"><b>Ready</b><div>${V.full.length} stack` +
-      `${V.full.length > 1 ? "s" : ""} loaded.</div></div>`;
-  }
-  if (V.notes.length) {
-    h += `<div class="msg m-info"><b>Note</b><div><ul>` +
-      V.notes.map(n => `<li>${esc(n)}</li>`).join("") + `</ul></div></div>`;
-  }
-  return h;
+  return V.errs.length
+    ? `<div class="msg m-bad"><b>Blocked</b><div>${esc(V.errs[0])}</div></div>`
+    : `<div class="msg m-good"><b>Ready</b><div></div></div>`;
 }
 
 // ── render ─────────────────────────────────────────────────────────────
@@ -203,7 +191,7 @@ function bodyHtml(st) {
         <div class="legend">
           <div><i class="full"></i> Full stack</div>
           <div><i class="empty"></i> Empty</div>
-          <div><i class="out"></i> Pass / Fail — must start empty; the robot fills them</div>
+          <div><i class="out"></i> Pass / Fail</div>
         </div>
       </div>
     </div>
@@ -259,42 +247,57 @@ function render(wrap, st) {
 // The Parameters modal's width is PLATFORM CSS (540px, or 1120px with
 // .modal-wide) — neither is this screen's width, so the bench either
 // wraps or floats in dead space. Same liberty bna and tph take: measure
-// the bench, ask the modal to match, and restore the previous width the
-// moment the overlay closes so nothing leaks into the next project's
-// screen. Every lookup is optional — if the platform renames .modal or
-// the measurement is 0, this quietly does nothing.
+// the bench and ask the modal to match. Every lookup is optional — if
+// the platform renames .modal or the measurement is 0, this quietly does
+// nothing.
+//
+// THE PLATFORM CACHES THIS SCREEN ACROSS OPENS (kwargs.js
+// renderKwargsForm's render-signature cache): re-opening the modal with
+// the same values does NOT call mount() again. So the fit cannot live in
+// mount alone — one observer per modal, kept for the life of the page,
+// re-fits on every show and restores the platform's width on every hide,
+// so nothing leaks into another screen shown in the same modal.
 const MODAL_CHROME_PX = 44;   // .modal-body padding (20+20) + borders
 const CARD_PAD_PX     = 30;   // .card padding (14+14) + border
+const SLACK_PX        = 36;   // the scroll padding + a margin, so nothing
+                              // the cursor does can widen the content
 
 function fitModalTo(root, wrap) {
   const holder = root && root.host;
   if (!holder || typeof holder.closest !== "function") return;
   const modal = holder.closest(".modal");
   if (!modal || !modal.style) return;
+  // The latest screen in this modal — a remount (Reset All, new values)
+  // replaces the wrapper, and the observer below must measure the live one.
+  modal._apcFit = { root, wrap };
   // Measure the BENCH, not the wrapper: a squeezed wrapper reports the
   // squeezed width, and sizing to that would lock the squeeze in.
   const bench = typeof wrap.querySelector === "function" && wrap.querySelector(".rack.disc");
-  const need = bench ? Math.ceil(bench.scrollWidth || 0) + CARD_PAD_PX + MODAL_CHROME_PX : 0;
-  if (!(need > CARD_PAD_PX + MODAL_CHROME_PX)) return;      // no layout yet — leave it alone
+  const need = bench ? Math.ceil(bench.scrollWidth || 0) + SLACK_PX + CARD_PAD_PX + MODAL_CHROME_PX : 0;
+  if (!(need > SLACK_PX + CARD_PAD_PX + MODAL_CHROME_PX)) return;   // no layout yet — leave it alone
 
-  if (modal.dataset.apcFitted !== "1") {
-    modal.dataset.apcFitted = "1";
+  if (modal.dataset.apcSaved !== "1") {          // the platform's own width, once
+    modal.dataset.apcSaved = "1";
     modal.dataset.apcPrevW = modal.style.width || "";
     modal.dataset.apcPrevM = modal.style.maxWidth || "";
-    const overlay = modal.closest(".modal-overlay");
-    if (overlay && typeof MutationObserver === "function") {
-      const obs = new MutationObserver(() => {
-        if (overlay.classList.contains("show")) return;
-        modal.style.width = modal.dataset.apcPrevW;
-        modal.style.maxWidth = modal.dataset.apcPrevM;
-        delete modal.dataset.apcFitted;
-        obs.disconnect();
-      });
-      obs.observe(overlay, { attributes: true, attributeFilter: ["class"] });
-    }
   }
   modal.style.width = `min(${need}px, calc(100vw - 32px))`;
   modal.style.maxWidth = "none";
+
+  const overlay = modal.closest(".modal-overlay");
+  if (overlay && typeof MutationObserver === "function" && !modal._apcFitObs) {
+    const obs = new MutationObserver(() => {
+      if (overlay.classList.contains("show")) {
+        const live = modal._apcFit;
+        if (live) fitModalTo(live.root, live.wrap);
+      } else {
+        modal.style.width = modal.dataset.apcPrevW || "";
+        modal.style.maxWidth = modal.dataset.apcPrevM || "";
+      }
+    });
+    obs.observe(overlay, { attributes: true, attributeFilter: ["class"] });
+    modal._apcFitObs = obs;
+  }
 }
 
 // ── the platform's setup-screen contract ──────────────────────────────
@@ -333,8 +336,20 @@ export default {
     root.appendChild(wrap);
     render(wrap, _st);
     // After layout, not during it: scrollWidth is 0 until the browser
-    // has laid the bench out.
-    if (typeof requestAnimationFrame === "function") {
+    // has laid the bench out — and on a RE-open the module is already
+    // cached, so mount() runs before the overlay is even shown (display:
+    // none, width 0). One frame is not enough then; watch the bench and
+    // fit the moment it has a size. Falls back to a frame when there is
+    // no ResizeObserver.
+    const bench = wrap.querySelector(".rack.disc");
+    if (bench && typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(() => {
+        if (!(bench.scrollWidth > 0)) return;
+        fitModalTo(root, wrap);
+        ro.disconnect();
+      });
+      ro.observe(bench);
+    } else if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => fitModalTo(root, wrap));
     }
   },
