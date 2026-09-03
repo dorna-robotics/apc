@@ -1,11 +1,16 @@
 {%- set sf = 1 -%}
+{#- Planned-travel primitive for every recipe — one knob, like sf.
+    [true, cjmove] = certified cont-jmove chains; [true, smove] = one
+    spline through the fold (watch sparse planner segments — the
+    known smove caveat). -#}
+{%- set hmp = "[true, smove]" -%}
 
 # Robot (generic): base Recipe with NO component. Owns no station, does no
 # boot-time IK — the stable handle for robot-level Start/Park calls
 # (park(joint=...), motor). Same across every project.
 robot:
   class: workspace.recipes.recipe.Recipe
-  kwargs: {speed_factor: {{ sf }}, has_motion_plan: [true, cjmove]}
+  kwargs: {speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Disc in/out holders. Each Rack recipe targets the adapter_disc_holder
 # and the resolver walks down to the stack_holder sitting on it (at the
@@ -21,31 +26,31 @@ robot:
 # --- IN sources ---
 disc_in_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_in_1, ref_joints: [-71.8, -27.9, -19.6, 0.0, -42.6, 108.2, 232.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_in_1, ref_joints: [-71.8, -27.9, -19.6, 0.0, -42.6, 108.2, 232.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 disc_in_2:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_in_2, ref_joints: [-59.0, -25.2, -26.6, 0.0, -38.2, 121.0, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_in_2, ref_joints: [-59.0, -25.2, -26.6, 0.0, -38.2, 121.0, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # --- OUT good ---
 disc_out_good_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_good_1, ref_joints: [-54.7, -17.3, -52.9, 0.0, -19.8, 125.3, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_out_good_1, ref_joints: [-54.7, -17.3, -52.9, 0.0, -19.8, 125.3, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 disc_out_good_2:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_good_2, ref_joints: [-49.2, -14.7, -68.1, 0.0, -7.2, 130.8, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_out_good_2, ref_joints: [-49.2, -14.7, -68.1, 0.0, -7.2, 130.8, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # --- OUT bad (rejected) ---
 disc_out_bad_1:
   class: workspace.recipes.rack.Rack
-  kwargs: {component: adapter_disc_out_bad_1, ref_joints: [-42.3, -14.4, -78.4, 0.0, 2.8, 137.7, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: adapter_disc_out_bad_1, ref_joints: [-42.3, -14.4, -78.4, 0.0, 2.8, 137.7, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # ── Stations ────────────────────────────────────────────────────────
 # Inspection — present the held disc to the camera + run detect().
 inspector:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_horizontal_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/"}}, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: inspection_horizontal_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Robot-camera inspector — the core-mounted D405 (no component, no
 # motion surface): inspects the disc ON the anode right after placing,
@@ -60,7 +65,7 @@ inspector_robot:
 # station, same as placing on the scale pan).
 anode:
   class: workspace.recipes.scale.Scale
-  kwargs: {component: anode_1, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: [true, clmove]}
+  kwargs: {component: anode_1, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Multimeter — read the disc's capacitance while it's clamped anode↔cathode.
 meter:

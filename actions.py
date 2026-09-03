@@ -312,6 +312,9 @@ class Create(Action):
 
 class Pick(Action):
     """Suction-pick the disc off the IN stack."""
+    # soft_approach=False: shallow stacks, straight-down grab — the extra
+    # waypoint above the slot buys nothing over ~3500 discs.
+    PRM      = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=False)
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -329,7 +332,7 @@ class Pick(Action):
         in_h, slot, _z = INVENTORY[disc]   # same position the disc was created at
         rt.step(f"disc {disc + 1}: pick from in_{in_h}[{slot}]")
         rt.step(_progress_pct(self), level="progress")
-        rcp[f"disc_in_{in_h}"].pick(slot, tool_tcp_z_offset=PICK_TCP_Z, soft_approach=False)
+        rcp[f"disc_in_{in_h}"].pick(slot, **self.PRM)
         return "picked"
 
 
@@ -395,6 +398,11 @@ class PlaceAnode(Action):
     unoccluded view of the disc for InspectTop."""
     VIEW_OFFSET = [0, 75, 60, 0, 0, 0]   # anchor-frame [x, y, z, a, b, c]
     EXIT_CLEARANCE = 10                  # mm above the placed disc
+    PRM      = dict(gravity_offset=PLACE_GRAV, soft_approach=False)
+    # The stand to the viewing pose stays a deliberate unplanned straight
+    # lmove — the exit=EXIT_CLEARANCE start may still be inside the
+    # anode's inflated box; this leg is the recipe-owned exit corridor.
+    STAND_PRM = dict(has_motion_plan=[False, "lmove"])
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -411,15 +419,10 @@ class PlaceAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].place("place", gravity_offset=PLACE_GRAV, soft_approach=False,
-                           exit=self.EXIT_CLEARANCE)
         # exit=<number> pulls off just EXIT_CLEARANCE mm above the disc
-        # (the approach keeps the recipe's full padding). That start may
-        # still be inside the anode's inflated box, so the stand to the
-        # viewing pose stays a deliberate unplanned straight lmove —
-        # this leg is the recipe-owned exit corridor.
-        rcp["anode"].stand("place", offset=self.VIEW_OFFSET,
-                           has_motion_plan=[False, "lmove"])
+        # (the approach keeps the recipe's full padding).
+        rcp["anode"].place("place", exit=self.EXIT_CLEARANCE, **self.PRM)
+        rcp["anode"].stand("place", offset=self.VIEW_OFFSET, **self.STAND_PRM)
         return "on_anode"
 
 
@@ -535,6 +538,7 @@ class CathodeUp(Action):
 
 class PickAnode(Action):
     """Suction-pick the disc back off the anode."""
+    PRM      = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, approach=True)
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -551,7 +555,7 @@ class PickAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: pick off anode")
         rt.step(_progress_pct(self), level="progress")
-        rcp["anode"].pick("place", tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, approach=True)
+        rcp["anode"].pick("place", **self.PRM)
         return "off_anode"
 
 
@@ -559,6 +563,11 @@ class Sort(Action):
     """Drop the disc into an OUT holder by its measured capacitance, into
     the next ordered slot (fill counter), then delete it — sorted discs
     are terminal and never linger in the scene."""
+    # soft_approach=False: Rack.place defaults it True, which inserts an
+    # extra waypoint just above the slot. The disc stacks are shallow and
+    # the drop is straight down, so the extra waypoint buys nothing and
+    # costs time on every one of ~3500 discs. Matches the pick side.
+    PRM      = dict(gravity_offset=PLACE_GRAV, soft_approach=False)
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -598,12 +607,7 @@ class Sort(Action):
         # accumulates (no meshes/pickables piling up over ~3500 discs). The
         # fill counter, not the scene, tracks where the next disc goes.
         # place() re-attaches the held disc_<i> into the slot; remove it.
-        # soft_approach=False: Rack.place defaults it to True, which inserts
-        # an extra waypoint just above the slot. The disc stacks are shallow
-        # and the drop is straight down, so the extra waypoint buys nothing
-        # and costs time on every one of ~3500 discs. Matches the pick side.
-        rcp[holder].place(slot, offset=[0, 0, z, 0, 0, 0], gravity_offset=PLACE_GRAV,
-                          soft_approach=False)
+        rcp[holder].place(slot, offset=[0, 0, z, 0, 0, 0], **self.PRM)
         name = _disc(disc)
         if name in ws.components:
             ws.remove_component(name)
