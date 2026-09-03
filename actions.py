@@ -102,15 +102,6 @@ SLOTS       = [f"A{c}" for c in range(1, 7 + 1)]  # A1 .. A7, in order
 Z_STEP      = 0.254                            # per-disc stack lift (mm), in + out
 MAX_PER_SLOT = 255                             # discs per slot before next slot
 
-# Good/bad capacitance window (Farads). Defaulted WIDE so everything
-# currently lands in "good" — set the real spec later.
-C_MIN = 0.0
-C_MAX = 1.0e9
-
-# Ordered OUT-holder fill sequences (recipe aliases, in fill order).
-GOOD_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
-BAD_HOLDERS  = ["disc_out_bad_1"]
-
 # Visual-inspection ROI: a 25x25x10 mm box over the disc. The ROI offset
 # (px slack around the projected box) differs per station, so it lives on
 # each Inspect class (InspectBottom.ROI_OFFSET / InspectTop.ROI_OFFSET).
@@ -412,9 +403,9 @@ class Create(Action):
 
 class Pick(Action):
     """Suction-pick the disc off the IN stack."""
-    # soft_approach=False: shallow stacks, straight-down grab — the extra
-    # waypoint above the slot buys nothing over ~3500 discs.
-    PRM      = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=False)
+    # soft_approach=True: stop at the gap above the stack, straight final
+    # descent — matches the Sort side (smove travel blends otherwise).
+    PRM      = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True)
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -448,6 +439,14 @@ class Present(Action):
     duration = 6
     resource = "robot"
 
+    # approach=True: the camera travel is a PLANNED fold, so the pick's
+    # held exit lift fuses into it — one stop (the pick gap), then a
+    # continuous ride to the camera. approach=False made this a direct
+    # unplanned hop, which can never consume a held tail: the pick exit
+    # ran classic (gap stop + padding stop) on every set. No soft
+    # approach — nothing delicate about arriving at a camera pose.
+    PRM      = dict(approach=True, soft_approach=False)
+
     def pre(self, disc):
         return picked(disc) & ~presented(disc)
 
@@ -459,7 +458,7 @@ class Present(Action):
         rt.step(f"disc {disc + 1}: present")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — to the camera")
-        rcp["inspector"].present(approach=False)   # no gravity offset, no soft approach
+        rcp["inspector"].present(**self.PRM)
         return "presented"
 
 
@@ -656,7 +655,14 @@ class CathodeUp(Action):
 
 class PickAnode(Action):
     """Suction-pick the disc back off the anode."""
-    PRM      = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, approach=True)
+    # fuse=True overrides the Scale class's fuse: false FOR THIS PICK
+    # ONLY (the anode place keeps the no-hover-over-the-station rule):
+    # the exit lift deposits and fuses into the sort travel. The sort
+    # targets advance per disc, so batch 1 records them (classic stops
+    # + one mismatch each); from the next batch the sequence repeats
+    # and the seam merges. Novel positions pay one classic pass each.
+    PRM      = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, approach=True,
+                    fuse=True)
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -682,11 +688,18 @@ class Sort(Action):
     """Drop the disc into an OUT holder by its measured capacitance, into
     the next ordered slot (fill counter), then delete it — sorted discs
     are terminal and never linger in the scene."""
-    # soft_approach=False: Rack.place defaults it True, which inserts an
-    # extra waypoint just above the slot. The disc stacks are shallow and
-    # the drop is straight down, so the extra waypoint buys nothing and
-    # costs time on every one of ~3500 discs. Matches the pick side.
-    PRM      = dict(gravity_offset=PLACE_GRAV, soft_approach=False)
+    # soft_approach=True: stop at the gap above the OUT slot and take the
+    # final descent as its own straight leg — under smove travel the
+    # blended approach curved close enough to brush the rack (bench,
+    # replay-recorded).
+    PRM      = dict(gravity_offset=PLACE_GRAV, soft_approach=True)
+    # Good/bad capacitance window (Farads). Defaulted WIDE so everything
+    # currently lands in "good" — set the real spec later.
+    C_MIN = 0.0
+    C_MAX = 1.0e9
+    # Ordered OUT-holder fill sequences (recipe aliases, in fill order).
+    GOOD_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
+    BAD_HOLDERS  = ["disc_out_bad_1"]
     params   = ["disc"]
     duration = 10
     resource = "robot"
@@ -709,8 +722,8 @@ class Sort(Action):
             # rather than silently binning a good disc as BAD.
             rt.step(f"disc {disc + 1}: no capacitance recorded — cannot sort", level="error")
             return False
-        good = C_MIN <= c <= C_MAX
-        holders = GOOD_HOLDERS if good else BAD_HOLDERS
+        good = self.C_MIN <= c <= self.C_MAX
+        holders = self.GOOD_HOLDERS if good else self.BAD_HOLDERS
 
         filled = self.ctx.meta.setdefault("filled", {})   # holder → n dropped
         nxt = _next_drop(filled, holders)
