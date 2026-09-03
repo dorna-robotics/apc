@@ -1,0 +1,31 @@
+# apc — the kwargs and their defaults.
+#
+# Read HEADLESSLY: bt.replay, launch, Start-with-defaults and server-side
+# validation all parse this with no browser anywhere, which is why it is
+# yaml and not part of the screen (hmi-guide §10b).
+#
+# BARE entries: the value IS the default. This project ships its own
+# `setup:` screen (hmi/setup.js), so presentation — the holder pictures,
+# the full/empty clicks, the legend — lives there, not here. The schema
+# never describes how anything looks.
+
+# IN inventory — one list of 7 per IN holder, index i = anchor A(i+1) of
+# that holder. The screen writes 255 (MAX_PER_SLOT, the discs in a full
+# stack) for a position the operator marked FULL and 0 for EMPTY, so the
+# run record reads as disc counts; setup() in actions.py treats ANY
+# positive entry as a full stack and builds the per-disc INVENTORY from
+# the two lists (in_1 first, A1→A7, then in_2).
+#
+# ALL ZEROS BY DEFAULT — an operator must click what they loaded, and the
+# screen blocks Start until at least one position is full. A headless
+# replay therefore plans NOTHING unless it names its inventory; setup()
+# also accepts the list as a comma string, so:
+#
+#   python -m workspace.bt.replay ... in_1=1,1,1,1,1,1,1
+#
+# marks every In 1 position full. A full position is MAX_PER_SLOT discs
+# (actions.py), so a replay of even one full stack plans a few hundred
+# discs in one shot — above plan_window, where bt.replay reports "no
+# plan" (the same caveat bna documents). Trust a real windowed run.
+in_1: [0, 0, 0, 0, 0, 0, 0]
+in_2: [0, 0, 0, 0, 0, 0, 0]

@@ -1,7 +1,7 @@
 # apc — launch config.
 #
 # IN inventory: in_1 / in_2 are lists of 7 — index i is the number of
-# discs stacked at anchor A(i+1) of that holder (0..225 each). Total
+# discs stacked at anchor A(i+1) of that holder (0..255 each). Total
 # discs = sum of both lists. Stacks are consumed top-first, A1→A7, in_1
 # until empty, then in_2.
 #
@@ -18,18 +18,13 @@ scene:        [scene/core_500.j2, scene/layout.j2]
 recipes:      recipes.j2
 actions:      actions.py
 checks:       checks.py
+default:      hmi/default.j2       # the kwargs' defaults (data — Python reads it)
+setup:        hmi/setup.js         # run-setup screen: click the in stacks full/empty
+pendant:      hmi/pendant.js       # during-run screen: live holders, tally, last reading
 
 plan_window:  4
 scheduler:    cpsat
 
-default:
-  in_1:
-    type: list
-    default: [1, 1, 1, 1, 1, 1, 1]
-    label: in_1 discs per anchor
-    hint: "[A1..A7] — index i = discs stacked at anchor A(i+1) of in_1 (0..225)."
-  in_2:
-    type: list
-    default: [0, 0, 0, 0, 0, 0, 0]
-    label: in_2 discs per anchor
-    hint: "[A1..A7] — index i = discs stacked at anchor A(i+1) of in_2 (0..225)."
+# The kwargs (in_1 / in_2) live in hmi/default.j2 and are set through
+# hmi/setup.js, which draws the five disc holders as the operator sees
+# them and lets them mark each IN stack full or empty.

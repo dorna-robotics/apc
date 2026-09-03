@@ -1,7 +1,10 @@
 """apc protocol — Start → [per-disc pipeline] ×(inventory total) → Park.
 
-IN inventory comes from launch.yaml: two lists of 7 (``in_1``, ``in_2``),
-where index i = number of discs stacked at anchor A<i+1> of that holder.
+IN inventory comes from hmi/default.j2 through the setup screen: two lists
+of 7 (``in_1``, ``in_2``), index i = anchor A<i+1> of that holder, 0 for an
+empty position and any positive value (the screen writes MAX_PER_SLOT) for
+a FULL stack of MAX_PER_SLOT discs. The operator only ever says full or
+empty; the count is this file's.
 Discs are consumed TOP-of-stack first, A1→A7, in_1 until empty, then
 in_2. Each disc appears in the scene the moment it's about to be picked
 (create-on-demand, one at a time via feed_free) at its stack position
@@ -43,6 +46,12 @@ on pick, gravity_offset on place).
 
 NOTE: no tool swapping — the suction gripper is mounted on the robot
 (no rack), so NO action sets ``tool`` (leave it unset everywhere).
+
+PENDANT. Every action publishes the operator-facing picture through
+rt.op() (see _publish): a one-line headline in the operator's words, the
+five holders as per-position STATES (never counts — the operator never
+typed one), the pass/fail tally and the last reading. hmi/pendant.js
+binds to exactly these keys; change them together.
 """
 
 from __future__ import annotations
@@ -148,13 +157,16 @@ def _disc(disc: int) -> str:
 
 
 # ── IN inventory ──────────────────────────────────────────────────────
-# Filled by setup() from the launch.yaml in_1 / in_2 lists (each 7 ints,
-# index i = discs stacked at anchor A<i+1>). INVENTORY[disc] = (holder,
-# slot, z): stacks are consumed TOP-first (depth n-1 → 0, z = depth ×
-# Z_STEP), slots A1→A7, in_1 until empty, then in_2. Module-level so the
-# per-disc actions (Create / Pick) can read their position; rebuilt on
-# every setup() call, so a replan stays consistent with the same kwargs.
+# Filled by setup() from the in_1 / in_2 lists (each 7, index i = anchor
+# A<i+1>; any positive entry = a full stack of MAX_PER_SLOT). INVENTORY[disc] =
+# (holder, slot, z): stacks are consumed TOP-first (depth n-1 → 0, z =
+# depth × Z_STEP), slots A1→A7, in_1 until empty, then in_2. Module-level
+# so the per-disc actions (Create / Pick) can read their position; rebuilt
+# on every setup() call, so a replan stays consistent with the same kwargs.
+# LOADED[(holder, slot)] = discs that position started with — what the
+# pendant's in-stack states are computed against.
 INVENTORY: list = []   # disc index → (in_holder, slot, z)
+LOADED: dict = {}      # (in_holder, slot) → discs loaded there
 
 
 def _progress_pct(action):
@@ -172,18 +184,94 @@ def _progress_pct(action):
     return int((done + 1) / total * 100)
 
 
+# ── Pendant — what rt.op publishes ───────────────────────────────────
+# States, never numbers: the operator marked each position full or empty
+# and never saw a count, so the pendant shows the same vocabulary. Both
+# helpers are pure so they can be checked without a runtime.
+OUT_KEYS = (("disc_out_good_1", "good_1"), ("disc_out_good_2", "good_2"),
+            ("disc_out_bad_1", "bad_1"))
+
+
+def _in_states(loaded, picked, active=None):
+    """Per-position state of the two IN holders.
+      empty   nothing was loaded there
+      full    loaded, discs remain
+      active  the disc being picked right now comes from here
+      done    loaded, and every disc has been taken
+    ``loaded`` / ``picked`` map (holder, slot) → n; ``active`` is one
+    (holder, slot) or None."""
+    out = {}
+    for h in (1, 2):
+        row = []
+        for slot in SLOTS:
+            n, p = loaded.get((h, slot), 0), picked.get((h, slot), 0)
+            if active == (h, slot):
+                row.append("active")
+            elif n <= 0:
+                row.append("empty")
+            elif p >= n:
+                row.append("done")
+            else:
+                row.append("full")
+        out[f"in_{h}"] = row
+    return out
+
+
+def _out_states(filled):
+    """Per-position state of the three OUT holders, from the same fill
+    counter Sort uses (_next_drop): empty | filling | full."""
+    out = {}
+    for alias, key in OUT_KEYS:
+        c = filled.get(alias, 0)
+        row = []
+        for i in range(len(SLOTS)):
+            n = max(0, min(MAX_PER_SLOT, c - i * MAX_PER_SLOT))
+            row.append("empty" if n == 0 else "full" if n >= MAX_PER_SLOT else "filling")
+        out[key] = row
+    return out
+
+
+def _tag(disc):
+    # No total: the operator never typed a count and is not shown one.
+    return f"Disc {disc + 1}"
+
+
+def _pos(holder, slot):
+    return f"In {holder} {slot}"
+
+
+def _publish(action, headline=None, active=None, **extra):
+    """Push the operator-facing picture to the pendant. Replace semantics
+    per key (Runtime.op); observability never blocks the workflow."""
+    meta = action.ctx.meta
+    vals = dict(
+        in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active),
+        out_stacks=_out_states(meta.get("filled", {})),
+        total_n=len(INVENTORY),
+        pass_n=meta.get("pass_n", 0),
+        fail_n=meta.get("fail_n", 0),
+        done_n=meta.get("pass_n", 0) + meta.get("fail_n", 0),
+    )
+    if headline is not None:
+        vals["headline"] = headline
+    vals.update(extra)
+    action.ctx.runtime.op(**vals)
+
+
 # ── setup ─────────────────────────────────────────────────────────────
 
 def setup(**kwargs):
     def _counts(key, default):
-        """Parse an inventory spec into exactly len(SLOTS) ints — lenient
-        by design, since the GUI params form may deliver the list as a
-        string like "1,1,1,1,1,1,1" or "[2, 1]":
+        """Parse an inventory spec into exactly len(SLOTS) disc counts —
+        lenient by design, since a headless caller may deliver the list
+        as a string like "1,1,1,1,1,1,1" or "[1, 0]":
           * list/tuple of numbers → used as-is
           * string → brackets/spaces stripped, split on commas
           * scalar → treated as [scalar]
         A shorter list fills the leading anchors (rest 0); a longer one is
-        truncated to A1..A7. Values clamp to 0..MAX_PER_SLOT."""
+        truncated to A1..A7. Each entry is a FLAG: anything above zero is
+        a full stack of MAX_PER_SLOT discs (the screen sends 1 / 0), zero
+        is an empty position."""
         raw = kwargs.get(key, default)
         if isinstance(raw, str):
             raw = [p for p in raw.strip().strip("[]").replace(" ", "").split(",") if p]
@@ -195,7 +283,7 @@ def setup(**kwargs):
                 v = int(float(n))
             except (TypeError, ValueError):
                 v = 0
-            counts.append(max(0, min(MAX_PER_SLOT, v)))
+            counts.append(MAX_PER_SLOT if v > 0 else 0)
         counts += [0] * (len(SLOTS) - len(counts))
         return counts
 
@@ -203,8 +291,10 @@ def setup(**kwargs):
     in_2 = _counts("in_2", [0] * len(SLOTS))
 
     INVENTORY.clear()
+    LOADED.clear()
     for holder, counts in ((1, in_1), (2, in_2)):
         for s, n in enumerate(counts):
+            LOADED[(holder, SLOTS[s])] = n
             for depth in range(n - 1, -1, -1):        # top of the stack first
                 INVENTORY.append((holder, SLOTS[s], round(depth * Z_STEP, 3)))
 
@@ -254,6 +344,15 @@ class Start(Action):
         rcp = self.ctx.recipes
         ws  = self.ctx.workspace
         core = ws.components["core"]
+        # Fresh tallies for the pendant — a batch runs start-to-finish, and
+        # None clears a reading left from the previous run (rt.op removes
+        # the key).
+        for k in ("picked_from", "filled", "disc_c"):
+            self.ctx.meta[k] = {}
+        self.ctx.meta["pass_n"] = 0
+        self.ctx.meta["fail_n"] = 0
+        _publish(self, "Starting — homing", last_disc=None, last_c=None,
+                 last_c_unit=None, last_result=None)
         rt.motor(1)
         # Home the rail before any move that assumes a homed axis:
         # set_axis_with_stop configures the axis + PID and homes against
@@ -296,6 +395,7 @@ class Create(Action):
         in_h, slot, z = INVENTORY[disc]   # configured stack position
         rt.step(f"disc {disc + 1}: create at in_{in_h}[{slot}] z={z}")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — next from {_pos(in_h, slot)}", active=(in_h, slot))
         ws.add_component(name, {
             "type": "disc_22mm",
             "attach": {
@@ -332,7 +432,13 @@ class Pick(Action):
         in_h, slot, _z = INVENTORY[disc]   # same position the disc was created at
         rt.step(f"disc {disc + 1}: pick from in_{in_h}[{slot}]")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — picking from {_pos(in_h, slot)}", active=(in_h, slot))
         rcp[f"disc_in_{in_h}"].pick(slot, **self.PRM)
+        # One more taken from that position: the pendant's in-stack state
+        # (full → done) is computed from this, never from the plan.
+        taken = self.ctx.meta.setdefault("picked_from", {})
+        taken[(in_h, slot)] = taken.get((in_h, slot), 0) + 1
+        _publish(self, f"{_tag(disc)} — picked from {_pos(in_h, slot)}")
         return "picked"
 
 
@@ -352,6 +458,7 @@ class Present(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: present")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — to the camera")
         rcp["inspector"].present(approach=False)   # no gravity offset, no soft approach
         return "presented"
 
@@ -378,6 +485,7 @@ class InspectBottom(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: inspect bottom")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — inspecting")
         # ROI box rides the gripper TCP — the disc is in the hand; the
         # box is projected with this frame's camera_in_world.
         tool = self.ctx.core.current_tool()
@@ -419,6 +527,7 @@ class PlaceAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: place on anode")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — onto the anode")
         # exit=<number> pulls off just EXIT_CLEARANCE mm above the disc
         # (the approach keeps the recipe's full padding).
         rcp["anode"].place("place", exit=self.EXIT_CLEARANCE, **self.PRM)
@@ -447,6 +556,7 @@ class InspectTop(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: inspect top")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — inspecting on the anode")
         anode_body = self.ctx.workspace.components["anode_1"].assembly["body"]
         res = rcp["inspector_robot"].detect(
             roi={"box": [float(v) for v in anode_body.pose("place")] + INSPECT_BOX_WDH,
@@ -473,6 +583,7 @@ class CathodeDown(Action):
         rt, ws = self.ctx.runtime, self.ctx.workspace
         rt.step(f"disc {disc + 1}: cathode down")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — clamping")
         ws.components["rotating_cylinder_mkb1630_1"].enable()
         return "cathode_down"
 
@@ -492,6 +603,7 @@ class Measure(Action):
     def execute(self, disc):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — measuring")
         m = rcp["meter"].read_capacitance()
         if m is None:
             # No implicit retry. A missing reading is an operator problem
@@ -513,6 +625,11 @@ class Measure(Action):
         # a planning fact (it's per-disc runtime data, not plan state).
         self.ctx.meta.setdefault("disc_c", {})[disc] = m.primary
         rt.step(f"disc {disc + 1}: C = {m.primary:g} {m.primary_unit}")
+        # The value itself goes to the pendant's reading card (SI-scaled
+        # there); the headline stays a step, not a number.
+        _publish(self, f"{_tag(disc)} — measured",
+                 last_disc=disc + 1, last_c=m.primary, last_c_unit=str(m.primary_unit),
+                 last_result="pass" if C_MIN <= m.primary <= C_MAX else "fail")
         return "measured"
 
 
@@ -532,6 +649,7 @@ class CathodeUp(Action):
         rt, ws = self.ctx.runtime, self.ctx.workspace
         rt.step(f"disc {disc + 1}: cathode up")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — unclamping")
         ws.components["rotating_cylinder_mkb1630_1"].disable()
         return "cathode_up"
 
@@ -555,6 +673,7 @@ class PickAnode(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(f"disc {disc + 1}: pick off anode")
         rt.step(_progress_pct(self), level="progress")
+        _publish(self, f"{_tag(disc)} — off the anode")
         rcp["anode"].pick("place", **self.PRM)
         return "off_anode"
 
@@ -613,6 +732,10 @@ class Sort(Action):
             ws.remove_component(name)
 
         filled[holder] = count + 1
+        self.ctx.meta["pass_n" if good else "fail_n"] = \
+            self.ctx.meta.get("pass_n" if good else "fail_n", 0) + 1
+        name_out = dict(OUT_KEYS)[holder].replace("good_", "Pass ").replace("bad_", "Fail ")
+        _publish(self, f"{_tag(disc)} — {'passed' if good else 'failed'} → {name_out} {slot}")
         return "sorted"
 
 
@@ -639,6 +762,8 @@ class Park(Action):
         # (collision-aware + a checkpoint so Pause/Resume stays live); apc has
         # no gripper/tool recipe, so we borrow "inspector".
         rcp["robot"].park(joint=self.PARK_JOINTS)
+        meta = self.ctx.meta
+        _publish(self, f"Parked — {meta.get('pass_n', 0)} passed, {meta.get('fail_n', 0)} failed")
         return "parked"
 
 
