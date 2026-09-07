@@ -50,7 +50,7 @@ disc_out_bad_1:
 # Inspection — present the held disc to the camera + run detect().
 inspector:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_horizontal_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  kwargs: {component: inspection_poe_vertical_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Robot-camera inspector — the core-mounted D405 (no component, no
 # motion surface): inspects the disc ON the anode right after placing,
@@ -60,12 +60,12 @@ inspector_robot:
   class: workspace.recipes.inspector.Inspector
   kwargs: {detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: false}}, speed_factor: {{ sf }}}
 
-# Anode — place/pick the disc on the anode's "place" anchor (Scale recipe
-# = base Recipe with target_anchor="place"; gives pick/place over a fixed
-# station, same as placing on the scale pan).
+# Anode — plain base Recipe: pick/place the disc on the anode's "place"
+# anchor. Everything is explicit here — no station class inherited (Scale
+# would drag in fuse=False and balance-tuned rail defaults).
 anode:
-  class: workspace.recipes.scale.Scale
-  kwargs: {component: anode_1, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  class: workspace.recipes.recipe.Recipe
+  kwargs: {component: anode_1, target_anchor: place, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Multimeter — read the disc's capacitance while it's clamped anode↔cathode.
 meter:

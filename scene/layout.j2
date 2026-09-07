@@ -1,21 +1,3 @@
-# apc — layout on the shared core_500 chassis.
-# Devices/components attach to the fixture plates from scene/core_500.j2.
-#
-# Contents:
-#   - tool rack + suction-cup gripper (to pick/place discs)
-#   - multimeter (BK 879B) on plate 1
-#   - anode on plate 1
-#   - rotating cylinder + cathode riding its plunger (as in the old apc)
-#   - disc adapters on plate 4: 2 IN sources + 3 OUT sinks
-#       in:  in_1, in_2
-#       out: good_1, good_2  (accepted discs)  +  bad_1  (rejected discs)
-#
-# This commit is scene-first — actions/recipes are the Start/Park scaffold
-# only; the pick → measure → sort workflow gets wired next.
-
-# ── Tooling ─────────────────────────────────────────────────────────
-# No tool rack in this cell — the suction gripper is mounted directly on
-# the robot (its tool-changer side mates to the Core's tool_changer_robot_side).
 gripper_suction_1:
   type: "gripper_suction"
   has_tool_changer: true
@@ -27,9 +9,6 @@ gripper_suction_1:
     child_anchor: "tool_changer_connection"
     offset: [0, 0, 0, 0, 0, 0]
 
-# ── Multimeter (BK 879B) ────────────────────────────────────────────
-# Sim by default; for the real meter set port + simulation:false (see
-# device-guide §9: ls -d /dev/serial/by-id/* for the stable path).
 multi_meter_1:
   type: "multi_meter_bk879b"
   port: "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0"
@@ -43,7 +22,6 @@ multi_meter_1:
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
 
-# ── Anode ───────────────────────────────────────────────────────────
 anode_1:
   type: "anode"
   attach:
@@ -54,11 +32,10 @@ anode_1:
     child_anchor: "hole_0"
     offset: [0, 0, 0, 0, 0, -90]
 
-# ── Rotating cylinder + cathode (cathode rides the plunger) ─────────
 rotating_cylinder_mkb1630_1:
   type: "rotating_cylinder_mkb1630"
-  output_enable: [[3, 1, 0]]
-  output_disable: [[3, 0, 0]]
+  output_enable: [3,1,0]
+  output_disable: [3,0,0]
   attach:
     parent_name: "fixture_plate_1"
     parent_solid: "body"
@@ -77,32 +54,6 @@ cathode_1:
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
 
-# ── Inspection (horizontal vision station) ──────────────────────────
-inspection_horizontal_1:
-  type: "inspection_horizontal_ids5mp"
-  simulation: true
-  camera_cfg:
-    serial_number: "4103947131"
-    ip: "10.0.1.40"
-    port: 80
-    focus: {mode: "manual", position: 138}
-  anchors:
-    body:
-      # component bakes place at z = 25.4+140; raise it 10mm higher for this unit
-      place: [0, -3.75, {{ 25.4 + 140 + 10 }}, 0, 0, 0]
-  attach:
-    parent_name: "fixture_plate_4"
-    parent_solid: "body"
-    parent_anchor: "A2"
-    child_solid: "body"
-    child_anchor: "hole_0"
-    offset: [0, 0, 0, 0, 0, 0]
-
-# ── Disc adapters on plate 4 ────────────────────────────────────────
-# Each disc holder is an adapter_disc_holder mounted on a plate hole,
-# with a stack_holder on the adapter's "place" anchor. 2 IN + 3 OUT.
-
-# --- IN source 1 ---
 adapter_disc_in_1:
   type: "adapter_disc_holder"
   attach:
@@ -123,7 +74,6 @@ stack_holder_disc_in_1:
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
 
-# --- IN source 2 ---
 adapter_disc_in_2:
   type: "adapter_disc_holder"
   attach:
@@ -144,7 +94,6 @@ stack_holder_disc_in_2:
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
 
-# --- OUT good 1 ---
 adapter_disc_out_good_1:
   type: "adapter_disc_holder"
   attach:
@@ -165,7 +114,6 @@ stack_holder_disc_out_good_1:
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
 
-# --- OUT good 2 ---
 adapter_disc_out_good_2:
   type: "adapter_disc_holder"
   attach:
@@ -186,7 +134,6 @@ stack_holder_disc_out_good_2:
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
 
-# --- OUT bad 1 (rejected discs) ---
 adapter_disc_out_bad_1:
   type: "adapter_disc_holder"
   attach:
@@ -227,4 +174,40 @@ collision_box_2:
     parent_anchor: "center"
     child_solid: "body"
     child_anchor: "left"
+    offset: [0, 0, 0, 0, 0, 0]
+
+pole_144mm_1:
+  type: "pole_144mm"
+  attach:
+    parent_name: "fixture_plate_5"
+    parent_solid: "body"
+    parent_anchor: "I2"
+    child_solid: "body"
+    child_anchor: "hole_0"
+    offset: [0, 0, 0, 0, 0, 0]
+
+inspection_poe_vertical_1:
+  type: "inspection_poe_vertical"
+  simulation: true
+  camera_cfg:
+    serial_number: "DB1119554"
+    ip: "10.0.1.40"
+    port: 80
+  attach:
+    parent_name: "pole_144mm_1"
+    parent_solid: "body"
+    parent_anchor: "place"
+    child_solid: "body"
+    child_anchor: "center"
+    offset: [0, 0, -75, 0, 0, 0]
+
+collision_box_3:
+  type: "collision_box"
+  size: [27, 25, 23]
+  attach:
+    parent_name: "inspection_poe_vertical_1"
+    parent_solid: "body"
+    parent_anchor: "top"
+    child_solid: "body"
+    child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
