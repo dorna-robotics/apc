@@ -211,3 +211,18 @@ collision_box_3:
     child_solid: "body"
     child_anchor: "center"
     offset: [0, 0, 0, 0, 0, 0]
+
+inspection_poe_robot_1:
+  type: "inspection_poe_robot"
+  simulation: true
+  camera_cfg:
+    serial_number: "DB1119531"
+    ip: "10.0.1.40"
+    port: 80
+  attach:
+    parent_name: "core"
+    parent_solid: "robot_A5"
+    parent_anchor: "hole_0"
+    child_solid: "body"
+    child_anchor: "hole_0"
+    offset: [0, 0, 0, 0, 0, 0]
