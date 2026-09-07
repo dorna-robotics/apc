@@ -628,7 +628,7 @@ class Measure(Action):
         # there); the headline stays a step, not a number.
         _publish(self, f"{_tag(disc)} — measured",
                  last_disc=disc + 1, last_c=m.primary, last_c_unit=str(m.primary_unit),
-                 last_result="pass" if C_MIN <= m.primary <= C_MAX else "fail")
+                 last_result="pass" if Sort.C_MIN <= m.primary <= Sort.C_MAX else "fail")
         return "measured"
 
 

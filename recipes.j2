@@ -61,11 +61,14 @@ inspector_robot:
   kwargs: {detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: false}}, speed_factor: {{ sf }}}
 
 # Anode — plain base Recipe: pick/place the disc on the anode's "place"
-# anchor. Everything is explicit here — no station class inherited (Scale
-# would drag in fuse=False and balance-tuned rail defaults).
+# anchor. Everything is explicit here — no station class inherited.
+# fuse: false — the arm must park CLEAR after the place, BEFORE the
+# cathode plunges; a held exit would leave the tool hovering over the
+# disc through the cathode cycle. (PickAnode re-enables fusing per call
+# for its exit -> sort travel.)
 anode:
   class: workspace.recipes.recipe.Recipe
-  kwargs: {component: anode_1, target_anchor: place, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  kwargs: {component: anode_1, target_anchor: place, fuse: false, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Multimeter — read the disc's capacitance while it's clamped anode↔cathode.
 meter:
