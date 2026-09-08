@@ -193,6 +193,11 @@ inspection_poe_vertical_1:
     serial_number: "DB1119554"
     ip: "10.0.1.40"
     port: 80
+  anchors:
+    body:
+      # component bakes place at lens + 70; this bench presents at
+      # lens + 100 (lens is at [-14.5, -29, 20.1])
+      place: [-14.5, -29, 120.1, 0, 0, 0]
   attach:
     parent_name: "pole_144mm_1"
     parent_solid: "body"
@@ -215,6 +220,13 @@ collision_box_3:
 inspection_poe_robot_1:
   type: "inspection_poe_robot"
   simulation: true
+  # No collision box: the camera rides robot_A5, and the planner's
+  # collision model only knows world-frame + flange-frame boxes — a
+  # link-mounted box freezes into the WORLD wrapped around the wrist
+  # and every plan starts "inside the envelope" (NO PATH). The camera
+  # is compact and hugs the link; the robot's own link geometry covers
+  # it, same as the d405 robot camera.
+  collision_box: {body: []}
   camera_cfg:
     serial_number: "DB1119531"
     ip: "10.0.1.40"
