@@ -503,7 +503,7 @@ class PlaceAnode(Action):
     (EXIT_CLEARANCE mm above the disc — the recipe's exit-leg number
     form), then stand at VIEW_OFFSET so the robot camera has an
     unoccluded view of the disc for InspectTop."""
-    VIEW_OFFSET = [0, 75, 60, 0, 0, 0]   # anchor-frame [x, y, z, a, b, c]
+    VIEW_OFFSET = [10, 50, 70, 0, 0, 0]  # anchor-frame [x, y, z, a, b, c]
     EXIT_CLEARANCE = 10                  # mm above the placed disc
     PRM      = dict(gravity_offset=PLACE_GRAV, soft_approach=False)
     # The stand to the viewing pose stays a deliberate unplanned straight
