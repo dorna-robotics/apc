@@ -2,7 +2,14 @@ __pycache__/
 *.pyc
 *.log
 .ipynb_checkpoints/
+status/
 core.json
 core_ik.json
 core_path.json
 /core/
+
+# results_dir / data_dir / rec_dir (launch.yaml defaults) — run output,
+# operator uploads, replay recordings. Data, never source.
+results/
+data/
+rec/

@@ -4,6 +4,12 @@
     spline through the fold (watch sparse planner segments — the
     known smove caveat). -#}
 {%- set hmp = "[true, smove]" -%}
+{#- The vision models, shipped to the vision unit at register time. A
+    detection's path is a file on THIS machine (the client sends the bytes;
+    nothing resolves it against the project folder), so it is absolute. -#}
+{%- set model = "/home/dorna/Downloads/projects/apc/model" -%}
+{%- set od  = '{cmd: od,  path: "' ~ model ~ '/disc.pkl", conf: 0.5}' -%}
+{%- set cls = '{cmd: cls, path: "' ~ model ~ '/disc_pass_fail_cropped.pkl", conf: 0.5, top_k: 1}' -%}
 
 # Robot (generic): base Recipe with NO component. Owns no station, does no
 # boot-time IK — the stable handle for robot-level Start/Park calls
@@ -47,18 +53,35 @@ disc_out_bad_1:
   kwargs: {component: adapter_disc_out_bad_1, ref_joints: [-42.3, -14.4, -78.4, 0.0, 2.8, 137.7, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # ── Stations ────────────────────────────────────────────────────────
-# Inspection — present the held disc to the camera + run detect().
+# Two models per camera, so TWO Inspector recipes per camera, each owning
+# one named detection on the same camera (Inspector.detection_name):
+#   *      — the disc DETECTOR (od). Owns the motion too: present() on
+#            the station form. actions.py passes its ROI per call as a 3D
+#            box, projected per frame (vision-guide §5).
+#   *_cls  — the pass/fail CLASSIFIER (cls). Never moves; actions.py runs
+#            it on the detector's box grown by CLS_ROI_OFFSET px, cropped.
+# The station pair share the station's solved pose (same ref_joints — the
+# IK cache answers the second one).
+
+# Vertical station — the held disc, bottom side.
 inspector:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_poe_vertical_1, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_od, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {detection: {{ od }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/bottom_od/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
-# Robot-camera inspector — the core-mounted D405 (no component, no
-# motion surface): inspects the disc ON the anode right after placing,
-# before the measurement. ROI comes per-call from actions.py as a 3D
-# box on the anode place anchor, projected per frame (vision-guide §5).
+inspector_cls:
+  class: workspace.recipes.inspector.Inspector
+  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_cls, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {detection: {{ cls }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/bottom_cls/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+
+# Robot camera — the core-mounted PoE camera (no component, no motion
+# surface): the disc ON the anode right after placing, before the
+# measurement, top side.
 inspector_robot:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {detection_preset: {frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: false}}, speed_factor: {{ sf }}}
+  kwargs: {detection_name: top_od, detection_preset: {detection: {{ od }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: false}}, speed_factor: {{ sf }}}
+
+inspector_robot_cls:
+  class: workspace.recipes.inspector.Inspector
+  kwargs: {detection_name: top_cls, detection_preset: {detection: {{ cls }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: false}}, speed_factor: {{ sf }}}
 
 # Anode — plain base Recipe: pick/place the disc on the anode's "place"
 # anchor. Everything is explicit here — no station class inherited.

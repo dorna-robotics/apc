@@ -6,7 +6,8 @@ to diverge. Project-specific behaviour lives in:
 
   * ``launch.yaml``   — project name, port, scene, recipes, kwargs
   * ``recipes.yaml``  — recipe wiring
-  * ``actions.py``    — BT actions
+  * ``actions.py``    — BT actions (or ``actions/``, a package — one
+                        module per phase; bt-framework-guide §13)
   * ``checks.py``     — vision / sensor checks
   * ``scene/*.j2``    — components + populated items
 
@@ -58,9 +59,10 @@ _register_project_components()
 
 
 def _import_module(rel_path: str):
-    """``'actions.py'`` → ``'actions'``; ``'protocol/actions.py'`` → ``'protocol.actions'``."""
-    name = rel_path.removesuffix(".py").replace("/", ".")
-    return importlib.import_module(name)
+    """``'actions.py'`` → ``'actions'``; ``'protocol/actions.py'`` →
+    ``'protocol.actions'``; ``'actions/'`` (a package) → ``'actions'``."""
+    name = rel_path.rstrip("/").removesuffix("/__init__.py").removesuffix(".py")
+    return importlib.import_module(name.replace("/", "."))
 
 
 actions = _import_module(LAUNCH.get("actions", "actions.py"))
@@ -80,6 +82,9 @@ def workflow_fn(*, workspace, core, **kwargs):
         # key. Only multi-dimension protocols need to name it here.
         slice_dim=LAUNCH.get("slice_dim"),
         scheduler=str(LAUNCH.get("scheduler", "cpsat")),
+        # The module holding ROUTE — phases.py for a phased project; unset,
+        # the actions module's own ROUTE (launcher._load_route).
+        route=LAUNCH.get("route"),
         **kwargs,
     )
 
@@ -100,17 +105,18 @@ def main():
         scene = [scene]
     scene = [str(_BASE_DIR / p) for p in scene]
 
-    ws = Workspace(config_path=scene, port=args.port)
-    # DECLARE the project folder; do not let the server guess it. It
-    # otherwise infers "the folder above scene/", which lands on the wrong
-    # project as soon as a project shares a sibling's scene
-    # (scene: [../scene/...]) — it would then serve the sibling's hmi/ and
-    # pendant, and save methods into the sibling's hmi/methods/.
+    # DECLARE the project folder; nothing guesses it. A platform left to
+    # infer "the folder above scene/" lands on the WRONG project as soon
+    # as a project borrows a sibling's scene (scene: [../scene/...]): it
+    # would serve the sibling's hmi/ and pendant, save methods into the
+    # sibling's hmi/methods/, and read and write the sibling's core/
+    # folder — calibration, every cache and the motion book included.
     #
-    # An attribute, not a constructor argument: a platform that does not
-    # read it yet just ignores it and keeps the old guess, so this file
-    # stays compatible with an unpatched workspace.
-    ws.project_dir = _BASE_DIR
+    # A CONSTRUCTOR ARGUMENT, because components are built inside it and
+    # some need the folder at that moment (the core binds its calibration
+    # file before the constructor returns). Where that folder is, is the
+    # project's own launch.yaml key ``core_dir`` (default <project>/core).
+    ws = Workspace(config_path=scene, port=args.port, project_dir=_BASE_DIR)
     RuntimeServer(runtime=ws.rt, workflow_fn=workflow_fn, workspace=ws).run()
 
 
