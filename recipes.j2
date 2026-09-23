@@ -62,26 +62,30 @@ disc_out_bad_1:
 #            it on the detector's box grown by CLS_ROI_OFFSET px, cropped.
 # The station pair share the station's solved pose (same ref_joints — the
 # IK cache answers the second one).
+# display: label 1 draws class + confidence on the frame (0 draws nothing,
+# whatever save_img says); save_img keeps that ANNOTATED frame, one jpg per
+# detect, in a folder per detection on the VISION unit (paths are its own,
+# vision-guide §5); save_img_roi keeps the bare crop the model saw.
 
 # Vertical station — the held disc, bottom side.
 inspector:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_od, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {detection: {{ od }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/bottom_od/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_od, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {detection: {{ od }}, frames_avg: 1, display: {label: 1, save_img: "/home/dorna/captures/apc/bottom_od/", save_img_roi: "/home/dorna/captures/apc/bottom_od/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 inspector_cls:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_cls, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {detection: {{ cls }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: "/home/dorna/captures/apc/bottom_cls/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_cls, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {detection: {{ cls }}, frames_avg: 1, display: {label: 1, save_img: "/home/dorna/captures/apc/bottom_cls/", save_img_roi: "/home/dorna/captures/apc/bottom_cls/"}}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Robot camera — the core-mounted PoE camera (no component, no motion
 # surface): the disc ON the anode right after placing, before the
 # measurement, top side.
 inspector_robot:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {detection_name: top_od, detection_preset: {detection: {{ od }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: false}}, speed_factor: {{ sf }}}
+  kwargs: {detection_name: top_od, detection_preset: {detection: {{ od }}, frames_avg: 1, display: {label: 1, save_img: "/home/dorna/captures/apc/top_od/", save_img_roi: false}}, speed_factor: {{ sf }}}
 
 inspector_robot_cls:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {detection_name: top_cls, detection_preset: {detection: {{ cls }}, frames_avg: 1, display: {label: 0, save_img: false, save_img_roi: false}}, speed_factor: {{ sf }}}
+  kwargs: {detection_name: top_cls, detection_preset: {detection: {{ cls }}, frames_avg: 1, display: {label: 1, save_img: "/home/dorna/captures/apc/top_cls/", save_img_roi: false}}, speed_factor: {{ sf }}}
 
 # Anode — plain base Recipe: pick/place the disc on the anode's "place"
 # anchor. Everything is explicit here — no station class inherited.
