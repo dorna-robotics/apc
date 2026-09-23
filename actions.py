@@ -138,16 +138,10 @@ SLOTS       = [f"A{c}" for c in range(1, 7 + 1)]  # A1 .. A7, in order
 Z_STEP      = 0.254                            # per-disc stack lift (mm), in + out
 MAX_PER_SLOT = 255                             # discs per slot before next slot
 
-# Visual-inspection ROI: a 25x25x10 mm box over the disc. The ROI offset
-# (px slack around the projected box) differs per station, so it lives on
-# each Inspect class (InspectBottom.ROI_OFFSET / InspectTop.ROI_OFFSET).
-# Horizontal station: box rides the gripper TCP (the disc is in hand).
-# Robot camera at the anode: box sits on the anode place anchor.
-INSPECT_BOX_WDH    = [25, 25, 10]
-INSPECT_CROP       = True
-# The classifier sees the detector's box grown by this many px on every
-# side (roi.offset on the box corners), cropped — the model was trained
-# on cropped discs (model/disc_pass_fail_cropped.pkl).
+# Visual inspection: the detector runs on the WHOLE frame (no ROI — it
+# finds the disc itself); the classifier then sees the detector's box
+# grown by this many px (roi.offset on the box corners), cropped — the
+# model was trained on cropped discs (model/disc_pass_fail_cropped.pkl).
 CLS_ROI_OFFSET     = 100
 
 # Suction motion offsets (mirror the runtime example).
@@ -202,11 +196,12 @@ def _verdict(res) -> str:
     return "pass" if res and res[0].get("cls") == "pass" else "fail"
 
 
-def _inspect(action, od_alias, cls_alias, roi):
+def _inspect(action, od_alias, cls_alias):
     """Detect, then classify — one camera, two models.
 
-    The detector (``od_alias``) runs on a fresh frame inside ``roi``; its
-    best box, grown by CLS_ROI_OFFSET px, is the classifier's
+    The detector (``od_alias``) runs on the WHOLE fresh frame — an
+    explicit empty ROI, so nothing set on the detection earlier narrows
+    it; its best box, grown by CLS_ROI_OFFSET px, is the classifier's
     (``cls_alias``) region on a frame taken right after, the disc at rest
     (the server caches one frame per detection). Returns ``"empty"`` when
     the detector finds no disc, ``"pass"`` / ``"fail"`` from the
@@ -216,19 +211,30 @@ def _inspect(action, od_alias, cls_alias, roi):
     """
     rcp = action.ctx.recipes
     found = rcp[od_alias].detect(
-        roi=roi,
+        roi={"corners": [], "crop": False},
         sim_return=[{"cls": "disc", "conf": 0.99, "center": [1000, 600],
                      "corners": [[900, 500], [1100, 500], [1100, 700], [900, 700]]}])
     if found is None:
         return None
     if not found:
         return "empty"
-    box = max(found, key=lambda r: r.get("conf", 0))["corners"]
+    best = max(found, key=lambda r: r.get("conf", 0))
+    box = best["corners"]
+    # The two boxes, in the run log: what the detector found (full-frame
+    # px) and what the classifier was handed. If the crop on the vision
+    # unit does not match these numbers, the fault is downstream of here.
+    xs = [c[0] for c in box]; ys = [c[1] for c in box]
+    action.ctx.runtime.step(
+        f"{od_alias}: {len(found)} found, best {best.get('conf', 0):.2f} at "
+        f"x {min(xs):.0f}..{max(xs):.0f} y {min(ys):.0f}..{max(ys):.0f} "
+        f"({max(xs) - min(xs):.0f}x{max(ys) - min(ys):.0f} px) -> {cls_alias} roi +{CLS_ROI_OFFSET} px")
     res = rcp[cls_alias].detect(
         roi={"corners": box, "offset": CLS_ROI_OFFSET, "crop": True},
         sim_return=[{"cls": "pass", "conf": 0.99}])
     if res is None:
         return None
+    if res:
+        action.ctx.runtime.step(f"{cls_alias}: {res[0].get('cls')} {res[0].get('conf', 0):.2f}")
     return _verdict(res)
 
 
@@ -577,7 +583,6 @@ class InspectBottom(Action):
     column is finished. This disc and every later disc of that column are
     VOID (done, never created), and the feed opens for the next column.
     """
-    ROI_OFFSET = 40   # px slack around the projected box (station camera)
     params   = ["disc"]
     duration = 6
     resource = "robot"
@@ -600,13 +605,7 @@ class InspectBottom(Action):
         rt.step(f"disc {disc + 1}: inspect bottom")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — inspecting")
-        # The detector's ROI box rides the gripper TCP — the disc is in the
-        # hand; the box is projected with this frame's camera_in_world.
-        tool = self.ctx.core.current_tool()
-        tcp = tool.assembly[next(iter(tool.assembly))].pose("tcp")
-        roi = {"box": [float(v) for v in tcp] + INSPECT_BOX_WDH,
-               "offset": self.ROI_OFFSET, "crop": INSPECT_CROP}
-        v = _inspect(self, "inspector", "inspector_cls", roi)
+        v = _inspect(self, "inspector", "inspector_cls")
         if v is None:
             rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
             return False
@@ -693,7 +692,6 @@ class InspectTop(Action):
     ``hand_empty`` in the pre keeps the arm at the anode hover: the
     planner cannot slot the next pick in between, so the camera is still
     over the anode when this runs."""
-    ROI_OFFSET = 20   # px slack around the projected box (robot camera)
     params   = ["disc"]
     duration = 6
     resource = "robot"
@@ -710,10 +708,7 @@ class InspectTop(Action):
         rt.step(f"disc {disc + 1}: inspect top")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — inspecting on the anode")
-        anode_body = self.ctx.workspace.components["anode_1"].assembly["body"]
-        roi = {"box": [float(v) for v in anode_body.pose("place")] + INSPECT_BOX_WDH,
-               "offset": self.ROI_OFFSET, "crop": INSPECT_CROP}
-        v = _inspect(self, "inspector_robot", "inspector_robot_cls", roi)
+        v = _inspect(self, "inspector_robot", "inspector_robot_cls")
         if v is None:
             rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")
             return False

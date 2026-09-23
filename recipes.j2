@@ -56,8 +56,7 @@ disc_out_bad_1:
 # Two models per camera, so TWO Inspector recipes per camera, each owning
 # one named detection on the same camera (Inspector.detection_name):
 #   *      — the disc DETECTOR (od). Owns the motion too: present() on
-#            the station form. actions.py passes its ROI per call as a 3D
-#            box, projected per frame (vision-guide §5).
+#            the station form. Runs on the WHOLE frame — no ROI.
 #   *_cls  — the pass/fail CLASSIFIER (cls). Never moves; actions.py runs
 #            it on the detector's box grown by CLS_ROI_OFFSET px, cropped.
 # The station pair share the station's solved pose (same ref_joints — the
