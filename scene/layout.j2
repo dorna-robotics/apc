@@ -2,7 +2,7 @@
     and the two cameras). true: no hardware is touched, every read is the
     recipe's sim_return. The core keeps its own switch in core_500.j2.
     Sim is orthogonal to connection state (device-guide §16). -#}
-{%- set sim = true -%}
+{%- set sim = false -%}
 gripper_suction_1:
   type: "gripper_suction"
   has_tool_changer: true
