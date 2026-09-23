@@ -1,7 +1,8 @@
 // hmi/setup.js — apc run setup: mark which IN stacks are loaded, see the bench.
 //
 // Hosted in a shadow root inside the Parameters modal. The platform owns
-// the modal chrome, the Set/Start buttons, and it validates whatever
+// the modal chrome — width, Upload / Open, Set / Start — untouched here so
+// every project's modal reads the same; it validates whatever
 // value() returns against hmi/default.j2; validate() only ADDS a message.
 // Contract: {css, mount(root, api), value(), validate()} — HMI_GUIDE §5.
 //
@@ -73,9 +74,9 @@ const CSS = kitCss + wellCss({
   good: "#a4d89c",     // a passed disc (pendant)
   bad:  "#e8a79c",     // a failed disc (pendant)
 }) + `
-/* everything in a card sits centred, the bench included */
+/* the bench is a picture: centred under its title, which stays left like
+   every field label of the generic form */
 .hmi.apc .card .inner { align-items:center; }
-.hmi.apc .card > h4 { text-align:center; }
 /* room for a hovered circle (the kit scales it 1.06) to grow WITHOUT
    spilling out of the scroll wrapper — a spill adds a scrollbar and the
    whole screen jumps under the cursor */
@@ -243,77 +244,6 @@ function render(wrap, st) {
   };
 }
 
-// ── fit the modal to this screen ──────────────────────────────────────
-// The Parameters modal's width is PLATFORM CSS (540px, or 1120px with
-// .modal-wide) — neither is this screen's width, so the bench either
-// wraps or floats in dead space. Same liberty bna and tph take: measure
-// the bench and ask the modal to match. Every lookup is optional — if
-// the platform renames .modal or the measurement is 0, this quietly does
-// nothing.
-//
-// THE PLATFORM CACHES THIS SCREEN ACROSS OPENS (kwargs.js
-// renderKwargsForm's render-signature cache): re-opening the modal with
-// the same values does NOT call mount() again. So the fit cannot live in
-// mount alone — one observer per modal, kept for the life of the page,
-// re-fits on every show and restores the platform's width on every hide,
-// so nothing leaks into another screen shown in the same modal.
-//
-// The same observer hides the modal's LOAD button while this screen is
-// up. Load is platform chrome that fills the GENERIC form's fields from
-// a file; a project screen has none, so for apc it could only ever say
-// "No matching parameters found". A control that cannot do anything has
-// no place on the operator's window. Restored on hide, like the width.
-const MODAL_CHROME_PX = 44;   // .modal-body padding (20+20) + borders
-const CARD_PAD_PX     = 30;   // .card padding (14+14) + border
-const SLACK_PX        = 36;   // the scroll padding + a margin, so nothing
-                              // the cursor does can widen the content
-
-function showLoadButton(modal, on) {
-  const btn = (modal && modal.querySelector && modal.querySelector("#btnParamsLoad"))
-    || (typeof document !== "undefined" && document.getElementById("btnParamsLoad"));
-  if (btn && btn.style) btn.style.display = on ? "" : "none";
-}
-
-function fitModalTo(root, wrap) {
-  const holder = root && root.host;
-  if (!holder || typeof holder.closest !== "function") return;
-  const modal = holder.closest(".modal");
-  if (!modal || !modal.style) return;
-  showLoadButton(modal, false);
-  // The latest screen in this modal — a remount (Reset All, new values)
-  // replaces the wrapper, and the observer below must measure the live one.
-  modal._apcFit = { root, wrap };
-  // Measure the BENCH, not the wrapper: a squeezed wrapper reports the
-  // squeezed width, and sizing to that would lock the squeeze in.
-  const bench = typeof wrap.querySelector === "function" && wrap.querySelector(".rack.disc");
-  const need = bench ? Math.ceil(bench.scrollWidth || 0) + SLACK_PX + CARD_PAD_PX + MODAL_CHROME_PX : 0;
-  if (!(need > SLACK_PX + CARD_PAD_PX + MODAL_CHROME_PX)) return;   // no layout yet — leave it alone
-
-  if (modal.dataset.apcSaved !== "1") {          // the platform's own width, once
-    modal.dataset.apcSaved = "1";
-    modal.dataset.apcPrevW = modal.style.width || "";
-    modal.dataset.apcPrevM = modal.style.maxWidth || "";
-  }
-  modal.style.width = `min(${need}px, calc(100vw - 32px))`;
-  modal.style.maxWidth = "none";
-
-  const overlay = modal.closest(".modal-overlay");
-  if (overlay && typeof MutationObserver === "function" && !modal._apcFitObs) {
-    const obs = new MutationObserver(() => {
-      if (overlay.classList.contains("show")) {
-        const live = modal._apcFit;
-        if (live) fitModalTo(live.root, live.wrap);
-      } else {
-        modal.style.width = modal.dataset.apcPrevW || "";
-        modal.style.maxWidth = modal.dataset.apcPrevM || "";
-        showLoadButton(modal, true);
-      }
-    });
-    obs.observe(overlay, { attributes: true, attributeFilter: ["class"] });
-    modal._apcFitObs = obs;
-  }
-}
-
 // ── the platform's setup-screen contract ──────────────────────────────
 // {css, mount(root, api), value(), validate()} — HMI_GUIDE §5.
 let _st = null;
@@ -349,23 +279,6 @@ export default {
     wrap.dataset.frozen = api && api.frozen ? "1" : "0";
     root.appendChild(wrap);
     render(wrap, _st);
-    // After layout, not during it: scrollWidth is 0 until the browser
-    // has laid the bench out — and on a RE-open the module is already
-    // cached, so mount() runs before the overlay is even shown (display:
-    // none, width 0). One frame is not enough then; watch the bench and
-    // fit the moment it has a size. Falls back to a frame when there is
-    // no ResizeObserver.
-    const bench = wrap.querySelector(".rack.disc");
-    if (bench && typeof ResizeObserver === "function") {
-      const ro = new ResizeObserver(() => {
-        if (!(bench.scrollWidth > 0)) return;
-        fitModalTo(root, wrap);
-        ro.disconnect();
-      });
-      ro.observe(bench);
-    } else if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => fitModalTo(root, wrap));
-    }
   },
 
   value() {

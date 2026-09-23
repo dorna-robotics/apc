@@ -1,3 +1,8 @@
+{#- Simulation, one knob for every device this layout adds (the meter
+    and the two cameras). true: no hardware is touched, every read is the
+    recipe's sim_return. The core keeps its own switch in core_500.j2.
+    Sim is orthogonal to connection state (device-guide §16). -#}
+{%- set sim = true -%}
 # apc — CALIBRATION layout on the shared core_500 chassis.
 #
 # This is scene/layout.j2 with ONE change: the robot carries the probe rod
@@ -29,7 +34,7 @@ probe_rod_1:
 multi_meter_1:
   type: "multi_meter_bk879b"
   port: ""
-  simulation: true
+  simulation: {{ sim }}
   critical: true
   attach:
     parent_name: "fixture_plate_1"

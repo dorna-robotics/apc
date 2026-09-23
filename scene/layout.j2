@@ -1,3 +1,8 @@
+{#- Simulation, one knob for every device this layout adds (the meter
+    and the two cameras). true: no hardware is touched, every read is the
+    recipe's sim_return. The core keeps its own switch in core_500.j2.
+    Sim is orthogonal to connection state (device-guide §16). -#}
+{%- set sim = true -%}
 gripper_suction_1:
   type: "gripper_suction"
   has_tool_changer: true
@@ -12,7 +17,7 @@ gripper_suction_1:
 multi_meter_1:
   type: "multi_meter_bk879b"
   port: "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0"
-  simulation: true
+  simulation: {{ sim }}
   critical: true
   attach:
     parent_name: "fixture_plate_1"
@@ -188,7 +193,7 @@ pole_144mm_1:
 
 inspection_poe_vertical_1:
   type: "inspection_poe_vertical"
-  simulation: true
+  simulation: {{ sim }}
   camera_cfg:
     serial_number: "DB1119554"
     ip: "10.0.1.40"
@@ -219,7 +224,7 @@ collision_box_3:
 
 inspection_poe_robot_1:
   type: "inspection_poe_robot"
-  simulation: true
+  simulation: {{ sim }}
   # No collision box: the camera rides robot_A5, and the planner's
   # collision model only knows world-frame + flange-frame boxes — a
   # link-mounted box freezes into the WORLD wrapped around the wrist
