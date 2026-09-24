@@ -399,11 +399,9 @@ def setup(**kwargs):
         return (done.name, disc) in state
 
     def goal(state):
-        return (
-            (started.name,) in state
-            and all(item_done(state, d) for d in discs)
-            and (parked.name,) in state
-        )
+        # What lies beyond the discs — the platform adds "every disc
+        # done or skipped" (workspace bt/skip.py).
+        return (started.name,) in state and (parked.name,) in state
 
 
     return {
@@ -929,9 +927,9 @@ class Park(Action):
     PARK_JOINTS = [0, 90, 0, 0, 0, 0, 100]
 
     def pre(self):
-        discs = self._ctx_all_objects().get("disc", [])
+        # Every disc STILL IN THE RUN — a skipped one is never done.
         expr = ~parked() & started()
-        for d in discs:
+        for d in self._ctx_items():
             expr = expr & done(d)
         return expr
 
@@ -947,7 +945,9 @@ class Park(Action):
         for d in self._ctx_all_objects().get("disc", []):
             if (created.name, d) not in facts:
                 continue                      # never entered the bench: no row
-            rt.record(_tag(d), status=_status_of(facts, d))
+            skip = self._ctx_skip(d)
+            rt.record(_tag(d), status=(f"skipped: {skip['by']} -> {skip['outcome']} ({skip['phase']})"
+                                       if skip else _status_of(facts, d)))
         # Move to the park pose. Recipe.park is a base move-to-joint
         # (collision-aware + a checkpoint so Pause/Resume stays live).
         rcp["robot"].park(joint=self.PARK_JOINTS)
