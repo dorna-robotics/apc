@@ -404,11 +404,21 @@ def setup(**kwargs):
         return (started.name,) in state and (parked.name,) in state
 
 
+    def item_components(workspace, disc):
+        # A disc's 3D model exists only between its Create and its Sort
+        # (created on demand, deleted once placed) — so it is the model
+        # when the disc is on the bench, nothing before or after. What an
+        # operator Replan clears when the disc is removed (workspace
+        # bt-framework-guide §8.6).
+        name = _disc(disc)
+        return [name] if name in workspace.components else []
+
     return {
-        "initial_facts": frozenset(),
-        "goal":          goal,
-        "item_done":     item_done,
-        "objects":       {"disc": discs},
+        "initial_facts":   frozenset(),
+        "goal":            goal,
+        "item_done":       item_done,
+        "objects":         {"disc": discs},
+        "item_components": item_components,
     }
 
 
