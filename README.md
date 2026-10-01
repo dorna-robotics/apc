@@ -10,10 +10,9 @@ through the bench at a time, `ROUTE` at the bottom of `actions.py`.
 Each inspection is two models on one camera: the detector finds the
 disc, the classifier judges the crop around its box (`CLS_ROI_OFFSET`
 px of margin). A classifier fail at either camera sends the disc to
-the fail column with no measurement. The station camera seeing NO disc
-means the IN stack ran out before the operator's mark: that column is
-finished, its remaining discs are voided, and the run moves to the
-next column.
+the fail column with no measurement. A disc the detector does not see
+at either camera is a fail too: the suction is never released mid-way,
+the hand goes to the fail column as if it held one.
 
 ## Layout
 
@@ -35,6 +34,7 @@ apc/
 ├── components/         # anode, cathode (@register)
 ├── CAD/                # their .glb
 ├── model/              # vision models the detections load (below)
+├── captures/           # every detection's drawn frame, one jpg per detect (git-ignored)
 ├── dev/camera/         # camera bring-up notebook
 └── core/               # this bench: calibration, caches, motion book (git-ignored)
 ```
@@ -55,7 +55,10 @@ the CAD: they are bench assets, not operator uploads (`data/`).
 
 `recipes.j2` registers four detections — `bottom_od` / `bottom_cls` on
 the station camera, `top_od` / `top_cls` on the robot camera — one
-Inspector recipe each. A detection loads its model by `path`; the path
+Inspector recipe each. The drawn frames are to land in
+`captures/<detection>/` next to the run's records, pushed by the vision
+unit after each detect (server-side work, pending); until then nothing
+is saved anywhere. An action never waits on a picture. A detection loads its model by `path`; the path
 is a file on THIS machine (the client ships the bytes to the vision
 unit at register time, nothing is staged there, vision-guide §5) and
 nothing resolves it against the project folder, so it is absolute.

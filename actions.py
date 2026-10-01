@@ -20,21 +20,20 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
    3. Present       carry it to the vertical inspection station.
    4. InspectBottom station camera: DETECT the disc (model/disc.pkl), then
                     CLASSIFY the same view cropped to its box + CLS_ROI_OFFSET
-                    px (model/disc_pass_fail_cropped.pkl). Three outcomes:
+                    px (model/disc_pass_fail_cropped.pkl). Two outcomes:
                       pass  → on to the anode;
-                      fail  → Reject: straight to the fail column;
-                      empty → no disc in the gripper: the stack was shorter
-                              than the operator's mark. The column is
-                              finished — this disc and every later disc of
-                              that column are VOID, and the run moves to
-                              the next column.
+                      fail  → Reject: straight to the fail column. A disc
+                              the detector does not see is a fail too —
+                              the suction is never released mid-way, the
+                              hand goes to the fail column as if it held
+                              one.
    5. Reject        (fail only) drop the held disc into the fail column.
    6. PlaceAnode    place the disc on the anode's "place" anchor, stand
                     where the robot camera sees it.
    7. InspectTop    robot camera: the same detect-then-classify. pass → the
                     measurement; fail → skip it, PickAnode takes the disc
                     straight to the fail column. No disc seen on the anode
-                    is a read failure (operator, Resume), never a verdict.
+                    is a fail too, never a pause.
    8. CathodeDown   drive the rotating cylinder down so the cathode contacts
                     the disc (clamped anode ↔ cathode).
    9. Measure       read the multimeter capacitance → record it for the disc.
@@ -44,8 +43,8 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     else C_MIN ≤ C ≤ C_MAX → good (fill out_good_1, then
                     _2), otherwise bad (out_bad_1). Ordered fill (below).
 
-Then Park once every disc is DONE — sorted, rejected or void. ``done`` is
-the closure fact every way out asserts; ``sorted`` / ``void`` say which. ``ROUTE`` at the bottom of this
+Then Park once every disc is DONE — sorted or rejected. ``done`` is the
+closure fact every way out asserts. ``ROUTE`` at the bottom of this
 file is that order, and being listed there is what makes an action part
 of the run (bt-framework-guide §13). A FLAT project: discs are strictly
 serial through the bench (feed / hand / anode each hold one) and a sorted
@@ -103,8 +102,7 @@ measured     = predicate("measured")     # capacitance read for this disc
 cathode_up   = predicate("cathode_up")   # cylinder retracted
 off_anode    = predicate("off_anode")    # disc re-gripped off the anode
 sorted_      = predicate("sorted")       # disc dropped into an out holder
-void         = predicate("void")         # never existed: its column ran out
-done         = predicate("done")         # THE closure fact — sorted or void
+done         = predicate("done")         # THE closure fact — sorted, good or bad
 parked       = predicate("parked")
 
 # ── Single-occupancy resources (capacity-1, no args) ──────────────────
@@ -114,11 +112,8 @@ parked       = predicate("parked")
 # while the cathode is down. Each fact is consumed (-fact) when its slot
 # fills and restored (+fact) when it empties, forcing strictly
 # one-disc-at-a-time:
-#   feed_free  — one disc at a time between Create and the station
-#                camera's verdict. Restored by InspectBottom, NOT by Pick:
-#                the next Create waits until the camera has settled what
-#                the pick actually took, so a column found empty can void
-#                its remaining discs before any of them is spawned.
+#   feed_free  — only one un-picked disc may exist (create → pick → create
+#                → pick…, never a batch of Creates ahead of the picks).
 #   hand_empty — the gripper holds one disc.
 #   anode_free — the anode/cathode station processes one disc.
 # See project-guide §8 "Single-occupancy resources".
@@ -179,14 +174,6 @@ def _next_drop(filled, holders):
 
 def _disc(disc: int) -> str:
     return f"disc_{disc}"
-
-
-def _column_mates(disc: int) -> list:
-    """The discs still to come from the same IN position as ``disc`` —
-    what an empty pick voids. Contiguous by construction (INVENTORY is
-    built column by column, top of the stack first)."""
-    col = INVENTORY[disc][:2]
-    return [d for d in range(disc + 1, len(INVENTORY)) if INVENTORY[d][:2] == col]
 
 
 def _verdict(res) -> str:
@@ -267,7 +254,7 @@ def _progress_pct(action):
 # The per-disc chain in order — what progress and the audit status read.
 _CHAIN = (created, picked, presented, inspected, bottom_failed, on_anode,
           anode_inspected, top_failed, cathode_down, measured, cathode_up,
-          off_anode, sorted_, void)
+          off_anode, sorted_)
 
 
 def _status_of(facts, disc):
@@ -285,15 +272,14 @@ OUT_KEYS = (("disc_out_good_1", "good_1"), ("disc_out_good_2", "good_2"),
             ("disc_out_bad_1", "bad_1"))
 
 
-def _in_states(loaded, picked, active=None, void=()):
+def _in_states(loaded, picked, active=None):
     """Per-position state of the two IN holders.
       empty   nothing was loaded there
       full    loaded, discs remain
       active  the disc being picked right now comes from here
-      done    loaded, and every disc has been taken — or the camera found
-              the stack empty early (``void``: the column is finished)
+      done    loaded, and every disc has been taken
     ``loaded`` / ``picked`` map (holder, slot) → n; ``active`` is one
-    (holder, slot) or None; ``void`` is a set of (holder, slot)."""
+    (holder, slot) or None."""
     out = {}
     for h in (1, 2):
         row = []
@@ -303,7 +289,7 @@ def _in_states(loaded, picked, active=None, void=()):
                 row.append("active")
             elif n <= 0:
                 row.append("empty")
-            elif p >= n or (h, slot) in void:
+            elif p >= n:
                 row.append("done")
             else:
                 row.append("full")
@@ -339,8 +325,7 @@ def _publish(action, headline=None, active=None, **extra):
     per key (Runtime.op); observability never blocks the workflow."""
     meta = action.ctx.meta
     vals = dict(
-        in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active,
-                             meta.get("void", set())),
+        in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active),
         out_stacks=_out_states(meta.get("filled", {})),
         total_n=len(INVENTORY),
         pass_n=meta.get("pass_n", 0),
@@ -447,7 +432,6 @@ class Start(Action):
         # the key).
         for k in ("picked_from", "filled", "disc_c", "verdict"):
             self.ctx.meta[k] = {}
-        self.ctx.meta["void"] = set()
         self.ctx.meta["pass_n"] = 0
         self.ctx.meta["fail_n"] = 0
         _publish(self, "Starting — homing", last_disc=None, last_c=None,
@@ -479,9 +463,8 @@ class Create(Action):
     resource = "robot"
 
     def pre(self, disc):
-        # feed_free gates one disc between Create and the camera's verdict;
-        # ~done skips a disc its column's empty pick already voided.
-        return started() & feed_free() & ~created(disc) & ~done(disc)
+        # feed_free gates one un-picked disc at a time (no batch of Creates).
+        return started() & feed_free() & ~created(disc)
 
     def eff(self, disc):
         return {"created": (+created(disc), -feed_free())}   # feed now occupied
@@ -527,9 +510,8 @@ class Pick(Action):
         return created(disc) & hand_empty() & ~picked(disc)
 
     def eff(self, disc):
-        # Disc into the hand: hand fills. The feed stays busy until
-        # InspectBottom has seen what the pick took (or that it took nothing).
-        return {"picked": (+picked(disc), -hand_empty())}
+        # Disc leaves the feed into the hand: feed frees, hand fills.
+        return {"picked": (+picked(disc), +feed_free(), -hand_empty())}
 
     def execute(self, disc):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
@@ -577,39 +559,33 @@ class Present(Action):
 
 class InspectBottom(Action):
     """Station camera: DETECT the held disc, then CLASSIFY it on the box
-    the detector found. A sensing action with three outcomes
-    (bt-framework-guide §7): ``pass`` (default), ``fail``, ``empty``.
+    the detector found. A sensing action with two outcomes
+    (bt-framework-guide §7): ``pass`` (default) and ``fail``.
 
-    A failed read (camera down) returns False — the success facts are
+    A disc the detector does not see is a FAIL, not a pause and not an
+    empty hand: the suction is never released mid-way, Reject carries
+    whatever the gripper holds to the fail column exactly as it would a
+    classified fail. The reason is kept for the audit row and the drop.
+
+    A failed READ (camera down) returns False — the success facts are
     asserted only on a valid reading; the planner re-selects this action
     after the operator recovers the camera and resumes (the scale
     pattern, project-guide §8). A dead camera raises
     CameraUnavailableError and pauses like any critical device.
-
-    ``empty`` — the detector sees no disc in the gripper: the operator
-    marked the stack full, but it ran out. The suction let go of air; the
-    column is finished. This disc and every later disc of that column are
-    VOID (done, never created), and the feed opens for the next column.
     """
     params   = ["disc"]
     duration = 6
     resource = "robot"
 
     def pre(self, disc):
-        return presented(disc) & ~inspected(disc) & ~bottom_failed(disc) & ~done(disc)
+        return presented(disc) & ~inspected(disc) & ~bottom_failed(disc)
 
     def eff(self, disc):
-        mates = _column_mates(disc)
-        return {
-            "pass":  (+inspected(disc), +feed_free()),
-            "fail":  (+bottom_failed(disc), +feed_free()),
-            # Nothing in the hand: hand empty, feed open, this column void.
-            "empty": (+void(disc), +done(disc), +hand_empty(), +feed_free(),
-                      *(f for d in mates for f in (+void(d), +done(d)))),
-        }
+        return {"pass": (+inspected(disc),),
+                "fail": (+bottom_failed(disc),)}
 
     def execute(self, disc):
-        rt, ws = self.ctx.runtime, self.ctx.workspace
+        rt = self.ctx.runtime
         rt.step(f"disc {disc + 1}: inspect bottom")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — inspecting")
@@ -617,22 +593,11 @@ class InspectBottom(Action):
         if v is None:
             rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
             return False
-        if v == "empty":
-            in_h, slot, _z = INVENTORY[disc]
-            mates = _column_mates(disc)
-            rt.step(f"disc {disc + 1}: no disc in the gripper — in_{in_h}[{slot}] is "
-                    f"empty, {len(mates)} more discs of that column voided")
-            # Let go of the air, and drop the phantom disc from the scene.
-            ws.components["gripper_suction_1"].disable()
-            if _disc(disc) in ws.components:
-                ws.remove_component(_disc(disc))
-            self.ctx.meta.setdefault("void", set()).add((in_h, slot))
-            rt.record(_tag(disc), visual_bottom="none")
-            _publish(self, f"{_pos(in_h, slot)} is empty — moving on")
-            return "empty"
-        rt.record(_tag(disc), visual_bottom=v)
-        if v == "fail":
-            rt.step(f"disc {disc + 1}: FAILED bottom inspection → fail column")
+        rt.record(_tag(disc), visual_bottom="none" if v == "empty" else v)
+        if v != "pass":
+            why = "bottom camera: no disc" if v == "empty" else "bottom camera: fail"
+            self.ctx.meta.setdefault("verdict", {})[disc] = why
+            rt.step(f"disc {disc + 1}: {why} → fail column")
             _publish(self, f"{_tag(disc)} — failed inspection", last_disc=disc + 1,
                      last_c=None, last_c_unit=None, last_result="fail")
             return "fail"
@@ -652,7 +617,8 @@ class Reject(Action):
         return {"rejected": (+sorted_(disc), +done(disc), +hand_empty())}
 
     def execute(self, disc):
-        return "rejected" if _drop(self, disc, good=False, why="bottom camera") else False
+        why = self.ctx.meta.get("verdict", {}).get(disc, "bottom camera")
+        return "rejected" if _drop(self, disc, good=False, why=why) else False
 
 
 class PlaceAnode(Action):
@@ -695,8 +661,8 @@ class InspectTop(Action):
     """Robot camera: the same detect-then-classify on the seated disc,
     before the measurement. ``pass`` (default) → measure; ``fail`` → the
     measurement is skipped and PickAnode takes it to the fail column.
-    No disc seen on the anode is not a verdict — the disc was placed, so
-    something is wrong on the bench: return False, operator, Resume.
+    No disc seen on the anode is a fail too: PickAnode re-grips whatever
+    is there and Sort drops it in the fail column, no pause.
     ``hand_empty`` in the pre keeps the arm at the anode hover: the
     planner cannot slot the next pick in between, so the camera is still
     over the anode when this runs."""
@@ -720,13 +686,11 @@ class InspectTop(Action):
         if v is None:
             rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")
             return False
-        if v == "empty":
-            rt.step(f"disc {disc + 1}: no disc seen on the anode — check the anode, then Resume")
-            return False
-        rt.record(_tag(disc), visual_top=v)
-        if v == "fail":
-            self.ctx.meta.setdefault("verdict", {})[disc] = "top_fail"
-            rt.step(f"disc {disc + 1}: FAILED top inspection → no measurement, fail column")
+        rt.record(_tag(disc), visual_top="none" if v == "empty" else v)
+        if v != "pass":
+            why = "top camera: no disc" if v == "empty" else "top camera: fail"
+            self.ctx.meta.setdefault("verdict", {})[disc] = why
+            rt.step(f"disc {disc + 1}: {why} → no measurement, fail column")
             _publish(self, f"{_tag(disc)} — failed inspection on the anode", last_disc=disc + 1,
                      last_c=None, last_c_unit=None, last_result="fail")
             return "fail"
@@ -914,8 +878,9 @@ class Sort(Action):
 
     def execute(self, disc):
         rt = self.ctx.runtime
-        if self.ctx.meta.get("verdict", {}).get(disc) == "top_fail":
-            good, why = False, "top camera"
+        verdict = self.ctx.meta.get("verdict", {}).get(disc)
+        if verdict is not None:
+            good, why = False, verdict
         else:
             c = self.ctx.meta.get("disc_c", {}).get(disc)
             if c is None:
@@ -930,7 +895,7 @@ class Sort(Action):
 
 
 class Park(Action):
-    """Final park — after every disc is done (sorted, rejected or void)."""
+    """Final park — after every disc is done (sorted, good or bad)."""
     params      = []
     duration    = 5
     resource    = "robot"
@@ -948,9 +913,8 @@ class Park(Action):
 
     def execute(self):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
-        # Status from the facts as they stand — "sorted" / "void" for a
-        # finished disc, else the last fact it reached (an OperatorPark
-        # mid-run). A voided disc never entered the bench and has no row.
+        # Status from the facts as they stand — "sorted" for a finished
+        # disc, else the last fact it reached (an OperatorPark mid-run).
         facts = (getattr(self.ctx, "state", None) or {}).get("facts") or set()
         for d in self._ctx_all_objects().get("disc", []):
             if (created.name, d) not in facts:

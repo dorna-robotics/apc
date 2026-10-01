@@ -13,3 +13,7 @@ core_path.json
 results/
 data/
 rec/
+
+# captures/ — every detection's drawn frame, fetched from the vision unit
+# after each detect (actions.py _save_capture). Data, one jpg per detect.
+captures/
