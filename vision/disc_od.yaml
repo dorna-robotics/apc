@@ -1,0 +1,15 @@
+# The disc DETECTOR — recipes.j2 inspector (bottom_od, station camera) and
+# inspector_robot (top_od, robot camera). Runs on the WHOLE frame, no ROI.
+# Every setting of the detection is here; recipes.j2 only names this file
+# (workspace docs/vision-guide.md §5 "Config files"). Every relative
+# path here is relative to THIS folder (vision/): the model beside it.
+# Nothing is kept on the vision unit (save_img / save_img_roi false).
+detection:
+  cmd: od
+  path: disc.pkl
+  conf: 0.5
+frames_avg: 1
+display:
+  label: 1              # class + confidence drawn on the frame
+  save_img: false
+  save_img_roi: false

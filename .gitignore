@@ -17,3 +17,6 @@ rec/
 # captures/ — every detection's drawn frame, fetched from the vision unit
 # after each detect (actions.py _save_capture). Data, one jpg per detect.
 captures/
+
+# keys (vlm.key ...) beside the config that names them — vision-guide §9
+*.key

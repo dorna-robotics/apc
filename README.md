@@ -33,7 +33,7 @@ apc/
 │   └── calibration.j2  # layout.j2 with the probe rod mounted (calibrate.ipynb)
 ├── components/         # anode, cathode (@register)
 ├── CAD/                # their .glb
-├── model/              # vision models the detections load (below)
+├── vision/             # the detections: a config per model, the model beside it (below)
 ├── captures/           # every detection's drawn frame, one jpg per detect (git-ignored)
 ├── dev/camera/         # camera bring-up notebook
 └── core/               # this bench: calibration, caches, motion book (git-ignored)
@@ -43,25 +43,29 @@ apc/
 uploads) and `rec/` (replay recordings) are the platform's defaults for
 this folder and are git-ignored.
 
-## `model/` — vision models
+## `vision/` — the detections
 
-Trained pickles for the vision server, checked in with the project like
-the CAD: they are bench assets, not operator uploads (`data/`).
+Each trained model sits beside the config that names it, checked in with
+the project like the CAD: they are bench assets, not operator uploads.
+A config's paths resolve against `vision/` itself (vision-guide §5
+"Config files"); a key for a vlm config goes beside it as `*.key`,
+git-ignored. `vision/` is not a file-browser tab.
 
-| file | type | for |
-|---|---|---|
-| `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
-| `disc_pass_fail_cropped.pkl` | `cls` — pass / fail on the cropped disc, 448 px, int8 | the visual verdict |
+| config | model | type | for |
+|---|---|---|---|
+| `disc_od.yaml` | `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
+| `disc_cls.yaml` | `disc_pass_fail_cropped.pkl` | `cls` — pass / fail on the cropped disc, 448 px, int8 | the visual verdict |
 
 `recipes.j2` registers four detections — `bottom_od` / `bottom_cls` on
 the station camera, `top_od` / `top_cls` on the robot camera — one
 Inspector recipe each. The drawn frames are to land in
 `captures/<detection>/` next to the run's records, pushed by the vision
 unit after each detect (server-side work, pending); until then nothing
-is saved anywhere. An action never waits on a picture. A detection loads its model by `path`; the path
-is a file on THIS machine (the client ships the bytes to the vision
-unit at register time, nothing is staged there, vision-guide §5) and
-nothing resolves it against the project folder, so it is absolute.
+is saved anywhere. An action never waits on a picture. Each detection is
+`detection_preset: {config: vision/disc_od.yaml}` — a relative path is
+relative to the file it is written in: `config:` to recipes.j2, the
+paths inside the config to `vision/`; the client ships the model's bytes to the vision unit at
+register time (vision-guide §5).
 Training: `~/Downloads/vision/training_notebooks/`.
 
 ## Run

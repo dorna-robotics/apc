@@ -18,9 +18,9 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     remaining stack at its in-holder anchor).
    2. Pick          suction-pick it off the IN stack.
    3. Present       carry it to the vertical inspection station.
-   4. InspectBottom station camera: DETECT the disc (model/disc.pkl), then
+   4. InspectBottom station camera: DETECT the disc (vision/disc_od.yaml), then
                     CLASSIFY the same view cropped to its box + CLS_ROI_OFFSET
-                    px (model/disc_pass_fail_cropped.pkl). Two outcomes:
+                    px (vision/disc_cls.yaml). Two outcomes:
                       pass  → on to the anode;
                       fail  → Reject: straight to the fail column. A disc
                               the detector does not see is a fail too —
@@ -136,7 +136,7 @@ MAX_PER_SLOT = 255                             # discs per slot before next slot
 # Visual inspection: the detector runs on the WHOLE frame (no ROI — it
 # finds the disc itself); the classifier then sees the detector's box
 # grown by this many px (roi.offset on the box corners), cropped — the
-# model was trained on cropped discs (model/disc_pass_fail_cropped.pkl).
+# model was trained on cropped discs (vision/disc_pass_fail_cropped.pkl).
 CLS_ROI_OFFSET     = 100
 
 # Suction motion offsets (mirror the runtime example).

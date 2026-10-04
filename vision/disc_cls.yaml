@@ -1,0 +1,16 @@
+# The disc PASS / FAIL CLASSIFIER — recipes.j2 inspector_cls (bottom_cls)
+# and inspector_robot_cls (top_cls), run on the detector's box grown by
+# CLS_ROI_OFFSET px, cropped. Every setting of the detection is here;
+# recipes.j2 only names this file (workspace docs/vision-guide.md §5 "Config files"). Every relative
+# path here is relative to THIS folder (vision/): the model beside it.
+# Nothing is kept on the vision unit (save_img / save_img_roi false).
+detection:
+  cmd: cls
+  path: disc_pass_fail_cropped.pkl
+  conf: 0.5
+  top_k: 1
+frames_avg: 1
+display:
+  label: 1              # class + confidence drawn on the frame
+  save_img: false
+  save_img_roi: false
