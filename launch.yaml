@@ -43,6 +43,7 @@ folders:
   - {key: captures, label: Captures, path: captures, read_only: false}
   - {key: replays,  label: Replays,  path: replays,  read_only: false}
   - {key: counts,   label: Counts,   path: counts,   read_only: false}
+  - {key: log,      label: Log,      path: log,      read_only: true}   # the project's console, orchestrator-written
 
 plan_window:  4
 scheduler:    cpsat

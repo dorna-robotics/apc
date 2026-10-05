@@ -42,14 +42,16 @@ apc/
 ├── replays/            # replay recordings (git-ignored)
 ├── uploads/            # operator input files — a file parameter's Open (git-ignored)
 ├── captures/           # the detections' pictures, one file per run per detection (git-ignored)
-└── counts/             # rt.count's totals across every run — counts.json (git-ignored)
+├── counts/             # rt.count's totals across every run — counts.json (git-ignored)
+└── log/                # the project's console — workspace.log, written by the orchestrator (git-ignored)
 ```
 
-The last five are data folders, never source: `records:`, `replays:`,
+The last six are data folders, never source: `records:`, `replays:`,
 `uploads:` and `counts:` in `launch.yaml` say where the platform writes,
-`captures/` is where the detections' `client_save_*` paths point, and
-`folders:` lists all five as file-browser tabs. The orchestrator creates
-them at launch. Counted across runs (`rt.count`): `disc.picked`,
+`captures/` is where the detections' `client_save_*` paths point,
+`log/` is where the orchestrator keeps the project's console, and
+`folders:` lists all six as file-browser tabs (Log read-only). The
+orchestrator creates them at launch. Counted across runs (`rt.count`): `disc.picked`,
 `inspect.bottom` / `inspect.top` (pass, fail, empty, read_failed),
 `measure` (n, unavailable), `disc.sorted` (n = every disc processed to
 the end, good, bad), `disc.removed`, `run` (completed, operator_park).
