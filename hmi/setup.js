@@ -71,6 +71,11 @@ const N_IN_STACKS = IN_HOLDERS.length * SLOTS_N;            // 14 clickable posi
 // for its address. Row labels sit in a gutter on the left.
 const CELL = 56, GAP = 6, GUTTER = 52;
 
+// A position in text: A3@In1 — the slot first, then the holder (its row
+// label with the space dropped). Used by every tooltip here and by the
+// Replan view's sentences.
+export const posName = (label, slot) => `${slot}@${String(label).replace(/\s+/g, "")}`;
+
 // ── styles ────────────────────────────────────────────────────────────
 // kitCss carries the shared language; wellCss declares the IDENTITY
 // colors — a loaded stack, a passed disc, a failed disc. Fixed hues that
@@ -95,14 +100,31 @@ export const CSS = kitCss + wellCss({
   line-height:1.1; font-size:11px; }
 .hmi .rack.disc .well b { font-size:12px; font-weight:700; }
 .hmi .rack.disc .well i { font-style:normal; font-size:8px; opacity:.7; margin-top:1px; }
-/* an EMPTY IN position: hollow and dashed, still a toggle */
-.hmi .rack.disc .well.empty { border-style:dashed; opacity:.55; }
-/* an OUT position on this page: a placeholder, nothing to click */
-.hmi .rack.disc .well.out { border-style:dashed; opacity:.4; }
-/* a position with discs ON OFFER in the Replan view: a count badge */
+/* an EMPTY IN position: one light look everywhere — a dashed ring in a
+   soft accent, a faint tint. On the Parameters screen it is also a
+   CONTROL (the kit's .pick: pointer, lifts on hover) labelled "+ fill";
+   in the Replan view the same look, without the pointer. */
+.hmi .rack.disc .well.empty { opacity:1; border-style:dashed;
+  border-color:color-mix(in srgb, var(--accent) 40%, var(--border));
+  background:color-mix(in srgb, var(--accent) 4%, var(--surface));
+  color:color-mix(in srgb, var(--accent) 70%, var(--muted)); }
+.hmi .rack.disc .well.empty.pick { border-color:color-mix(in srgb, var(--accent) 40%, var(--border));
+  color:color-mix(in srgb, var(--accent) 70%, var(--muted)); }
+.hmi .rack.disc .well.empty i { opacity:1; }
+.hmi .rack.disc .well.empty.pick i { font-weight:700; }
+/* an OUT position: a flat slot the ROBOT fills — solid faint ring, filled
+   surface, muted text, nothing to click */
+.hmi .rack.disc .well.out { background:var(--surface2); border-style:solid;
+  border-color:var(--border); color:var(--muted); opacity:.7; cursor:default; }
+/* the disc count as a small pill: a full stack's 255 here, the discs on
+   offer in the Replan view */
 .hmi .rack.disc .well .n { position:absolute; top:-6px; right:-6px; min-width:20px; height:20px;
   padding:0 6px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center;
   font-size:11px; font-weight:700; background:var(--accent); color:#fff; }
+/* a position chosen in the Replan view: every disc in it leaves — the
+   kit's .skip, bna's crossed-out look: dimmed and slashed, never hidden */
+.hmi .rack.disc .well.pos { cursor:pointer; transition:transform .12s ease; }
+.hmi .rack.disc .well.pos:hover { transform:scale(1.06); }
 /* row labels */
 .hmi .rack.disc .rlab { justify-self:start; font-size:11px; font-weight:700; }
 /* the OUT / IN groups are two different things: a hairline between them
@@ -116,10 +138,10 @@ export const CSS = kitCss + wellCss({
 /* a blocking message: bna's strip — the label, then the lines */
 .hmi .msg .lines { display:flex; flex-direction:column; gap:2px; line-height:1.5; min-width:0; }
 .hmi .legend i.full { background:var(--c-full); }
-.hmi .legend i.empty { background:var(--surface); border-color:var(--border);
-  border-style:dashed; }
-.hmi .legend i.out { background:var(--surface); border-color:var(--border);
-  border-style:dashed; opacity:.5; }
+.hmi .legend i.empty { background:color-mix(in srgb, var(--accent) 4%, var(--surface));
+  border-color:color-mix(in srgb, var(--accent) 40%, var(--border)); border-style:dashed; }
+.hmi .legend i.out { background:var(--surface2); border-color:var(--border);
+  border-style:solid; opacity:.7; }
 
 /* ── two steps in one screen ───────────────────────────────────────────
    The stepper is a pill of arrow segments — where you are and what comes
@@ -275,11 +297,16 @@ function msgHtml(V) {
 // groups. Every IN position is a toggle carrying its holder key and
 // index (data-h / data-i); OUT positions carry nothing.
 //
+// Every full position carries its disc count as a pill (FULL, 255).
 // opts.counts — {in_1: [7 numbers], in_2: [...]}: the Replan view's
-// discs on offer per position, drawn as a badge; with counts given the
-// positions are not toggles (the view's clicks go to its disc chips).
+// discs on offer per position; the pill shows that count instead, a
+// position with discs on offer is a choice (.pos, data-h / data-i) and
+// opts.crossed (a Set of "in_1:3") marks the positions chosen — every
+// disc in them leaves (drawn .skip: dimmed and slashed, as bna crosses a
+// sample out). With counts given nothing is a full/empty toggle.
 export function benchHtml(st, opts = {}) {
   const counts = opts.counts || null;
+  const crossed = opts.crossed || new Set();
   let h = `<div class="ax"></div>` + SLOTS.map(s => `<div class="ax">${s}</div>`).join("");
   let prevIn = null;
   for (const hd of HOLDERS) {
@@ -288,17 +315,22 @@ export function benchHtml(st, opts = {}) {
     h += `<div class="rlab">${esc(hd.label)}</div>`;
     for (let i = 0; i < SLOTS_N; i++) {
       const s = SLOTS[i];
-      const badge = counts && counts[hd.key] && counts[hd.key][i]
-        ? `<span class="n">${counts[hd.key][i]}</span>` : "";
-      const tog = counts ? "" : " toggle";
+      const full = hd.in && !!st.in[hd.key][i];     // OUT rows have no flags
+      const n = counts ? ((counts[hd.key] && counts[hd.key][i]) || 0) : (full ? FULL : 0);
+      const pill = n ? `<span class="n">${n}</span>` : "";
+      const pos = `${hd.key}:${i}`;
+      const cls = counts ? (n ? " pos" : "") + (crossed.has(pos) ? " skip" : "") : " toggle";
       if (!hd.in) {
-        h += `<div class="well out" title="${esc(`${hd.label} · ${s} · empty — the robot fills it during the run`)}"><b>${s}</b><i>empty</i></div>`;
-      } else if (st.in[hd.key][i]) {
-        h += `<div class="well k-full${tog}" data-h="${hd.key}" data-i="${i}" ` +
-          `title="${esc(`${hd.label} · ${s} · full${counts ? "" : " · click to mark empty"}`)}"><b>${s}</b><i>full</i>${badge}</div>`;
+        h += `<div class="well out" title="${esc(`${posName(hd.label, s)} · empty — the robot fills it during the run`)}"><b>${s}</b><i>empty</i></div>`;
+      } else if (full) {
+        const tip = counts ? `${n} disc${n === 1 ? "" : "s"} in the run${n ? " · click to take them all out" : ""}` : "full · click to mark empty";
+        h += `<div class="well k-full${cls}" data-h="${hd.key}" data-i="${i}" ` +
+          `title="${esc(`${posName(hd.label, s)} · ${tip}`)}"><b>${s}</b><i>full</i>${pill}</div>`;
       } else {
-        h += `<div class="well empty${tog}" data-h="${hd.key}" data-i="${i}" ` +
-          `title="${esc(`${hd.label} · ${s} · empty${counts ? "" : " · click to mark full"}`)}"><b>${s}</b><i>empty</i>${badge}</div>`;
+        const tip = counts ? "empty" : "empty · click to mark full";
+        const pick = counts ? "" : " pick";
+        h += `<div class="well empty${pick}${cls}" data-h="${hd.key}" data-i="${i}" ` +
+          `title="${esc(`${posName(hd.label, s)} · ${tip}`)}"><b>${s}</b><i>${counts ? "empty" : "+ fill"}</i>${pill}</div>`;
       }
     }
   }
@@ -372,8 +404,8 @@ function bodyHtml(st) {
         </div>
         <div class="legend">
           <div><i class="full"></i> Full stack</div>
-          <div><i class="empty"></i> Empty</div>
-          <div><i class="out"></i> Pass / Fail</div>
+          <div><i class="empty"></i> Empty — click to fill</div>
+          <div><i class="out"></i> Pass / Fail — the robot fills</div>
         </div>
       </div>
     </div>

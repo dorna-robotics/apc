@@ -449,6 +449,14 @@ class Start(Action):
             if not rcp["robot"].set_axis_with_stop(core.rail_cfg):
                 rt.step("homing failed")
                 return "killed"
+        # The cathode UP before anything is placed on the anode: a run
+        # killed between CathodeDown and CathodeUp, or an operator's
+        # Enable, leaves the cylinder down — and anode_free() is seeded
+        # above regardless. Every run starts with the cathode up by
+        # construction (within a run the facts guarantee it: PlaceAnode
+        # needs anode_free, which only PickAnode after CathodeUp gives).
+        rt.step("cathode up")
+        ws.components["rotating_cylinder_mkb1630_1"].disable()
         # Move to a known ready pose (Recipe.park is a base move-to-joint
         # on the generic component-less "robot" recipe).
         rcp["robot"].park(joint=self.START_JOINTS)

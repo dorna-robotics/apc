@@ -5,9 +5,13 @@
 //   Choose            the bench as the run-setup screen draws it
 //                     (setup.js benchHtml / benchState, from the run's own
 //                     parameters), each IN position badged with how many
-//                     of its discs are on offer, and the discs themselves
-//                     as chips — Disc 12 · In 1 A3 · on the anode. A click
-//                     crosses a disc out; again keeps it.
+//                     of its discs are still in the run. The choice is BY
+//                     POSITION: a click on a stack crosses it out and every
+//                     disc on offer in it leaves — the ones still stacked
+//                     and the one of them that may be on the cup or the
+//                     anode; again keeps it. Nothing is chosen one disc at
+//                     a time. Finished discs are not part of a position's
+//                     choice (removing one changes only its record).
 //   Clear the bench   how to get each chosen disc out — suction off
 //                     (the core's Disable Tool: the gripper's output-off
 //                     config), release the cathode if it is clamped,
@@ -23,7 +27,7 @@
 // the runtime. A disc is numbered as setup() in actions.py numbers it —
 // setup.js discPlace() puts it back on its stack position.
 
-import { CSS, benchHtml, benchState, discPlace, HOLDERS } from "./setup.js";
+import { CSS, benchHtml, benchState, discPlace, HOLDERS, posName } from "./setup.js";
 
 let _api = null;
 let _wrap = null;
@@ -40,13 +44,12 @@ const CYL = "rotating_cylinder_mkb1630_1";     // the cathode's cylinder (Cathod
 
 // Why an operator is here and what a click does — short bullets.
 const WHY = `<div class="why">
-  <div><h6>Take a disc out when</h6><ul>
-    <li>it is dropped, chipped or bent</li>
-    <li>the wrong disc is in the stack</li>
-    <li>it is stuck on the cup or the anode</li>
-    <li>the lab pulled it</li></ul></div>
+  <div><h6>Take a stack out when</h6><ul>
+    <li>the wrong discs are in it</li>
+    <li>a disc is dropped, chipped or stuck</li>
+    <li>the lab pulled the lot</li></ul></div>
   <div><h6>How</h6><ul>
-    <li>Click a disc below — it is crossed out</li>
+    <li>Click a stack position — it is crossed out, every disc in it leaves</li>
     <li>Click again to keep it</li>
     <li>Next: clear the bench, then give the reason</li></ul></div>
 </div>`;
@@ -61,51 +64,51 @@ function whereIs(i) {
   if (holds.some(h => /hand/i.test(h))) return "in the suction cup";
   if (holds.some(h => /feed/i.test(h))) return "at the camera station";
   const p = discPlace(_st, i);
-  return p ? `in ${LABEL[p.key]} ${p.slot}` : "off the bench";
+  return p ? `in ${posName(LABEL[p.key], p.slot)}` : "off the bench";
 }
 
 function discName(i) {
   return `Disc ${Number(i) + 1}`;
 }
 
-// The discs on offer, per IN position, for the bench's badges.
+// The positions: "in_1:3" → its live discs on offer (the choice), its
+// finished ones (a count, never chosen), and what the operator calls it.
+function positions() {
+  const by = new Map();
+  for (const [i, row] of _offer) {
+    const p = discPlace(_st, i);
+    if (!p) continue;
+    const key = `${p.key}:${p.index}`;
+    const e = by.get(key) || { key, holder: p.key, index: p.index, name: posName(LABEL[p.key], p.slot), live: [], done: [] };
+    (row.done ? e.done : e.live).push(i);
+    by.set(key, e);
+  }
+  for (const e of by.values()) { e.live.sort((a, b) => a - b); e.done.sort((a, b) => a - b); }
+  return [...by.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+const chosen = () => positions().filter(e => _st.crossedPos.has(e.key) && e.live.length);
+const chosenDiscs = () => chosen().flatMap(e => e.live);
+
+// The live discs per IN position, for the bench's pills.
 function offerCounts() {
   const counts = {};
   for (const h of HOLDERS) if (h.in) counts[h.key] = Array(_st.in[h.key].length).fill(0);
-  for (const [i, row] of _offer) {
-    if (row.done) continue;
-    const p = discPlace(_st, i);
-    if (p) counts[p.key][p.index] += 1;
-  }
+  for (const e of positions()) counts[e.holder][e.index] = e.live.length;
   return counts;
 }
 
-function chip(i) {
-  const row = _offer.get(i);
-  const x = _st.crossed.has(i);
-  return `<button type="button" class="chip${x ? " x" : ""}" data-i="${i}" aria-pressed="${x}">` +
-    `<b>${esc(discName(i))}</b><span>${esc(whereIs(i))}</span>` +
-    (row && row.with && row.with.length ? `<span class="with">+ ${esc(row.with.join(", "))}</span>` : "") +
-    `</button>`;
-}
+// A disc that is not in its stack any more: on the cup, the anode, at the
+// camera — named, because the operator has to go and get it.
+const inFlight = e => e.live.filter(i => ((_offer.get(i) || {}).holds || []).length);
 
 function chooseHtml() {
-  const live = [..._offer.keys()].filter(i => !_offer.get(i).done).sort((a, b) => a - b);
-  const done = [..._offer.keys()].filter(i => _offer.get(i).done).sort((a, b) => a - b);
-  const bench = `<div class="card"><h4>The bench</h4><div class="inner">
-      <div class="scroll"><div class="rack disc">${benchHtml(_st, { counts: offerCounts() })}</div></div>
-      <div class="legend"><div><i class="full"></i> Full stack</div><div><i class="empty"></i> Empty</div>
-        <div><i class="badge"></i> Discs on offer</div></div>
+  const legend = `<div class="legend"><div><i class="full"></i> Full stack</div><div><i class="empty"></i> Empty</div>
+        <div><i class="badge"></i> Discs in the run</div>` +
+    (_st.crossedPos.size ? `<div><i class="skip"></i> Leaves the run</div>` : "") + `</div>`;
+  return WHY + `<div class="card"><h4>The bench — click a stack to take it out</h4><div class="inner">
+      <div class="scroll"><div class="rack disc">${benchHtml(_st, { counts: offerCounts(), crossed: _st.crossedPos })}</div></div>
+      ${legend}
     </div></div>`;
-  const chips = live.length
-    ? `<div class="chips">${live.map(chip).join("")}</div>`
-    : `<p class="none">Nothing left in the run to remove.</p>`;
-  const fin = done.length ? `
-    <details class="done"><summary>Finished — ${done.length} disc${done.length === 1 ? "" : "s"}
-      <span class="muted">removing one changes only its record</span></summary>
-      <div class="chips">${done.map(chip).join("")}</div></details>` : "";
-  return WHY + bench + `<div class="card"><h4>Discs in the run — click to take out</h4><div class="inner">
-      ${chips}${fin}</div></div>`;
 }
 
 // Clear the bench — no checklist: how to get each disc out, with the
@@ -116,8 +119,12 @@ function btn(label, comp, meth) {
 }
 
 function clearHtml() {
-  const take = [..._st.crossed].sort((a, b) => a - b)
-    .map(i => `<li><b>${esc(discName(i))}</b> — ${esc(whereIs(i))}</li>`).join("");
+  const take = chosen().map(e => {
+    const fl = inFlight(e).map(i => `${discName(i)} ${whereIs(i)}`);
+    const stacked = e.live.length - fl.length;
+    return `<li><b>${esc(e.name)}</b> — ${stacked ? `the whole stack, ${stacked} disc${stacked === 1 ? "" : "s"}` : "the stack is empty"}` +
+      (fl.length ? `; ${esc(fl.join(", "))}` : "") + `</li>`;
+  }).join("");
   return `<div class="clear"><div class="how">
     <section>
       <h6><span class="n">1</span>Release what holds it</h6>
@@ -139,7 +146,7 @@ function clearHtml() {
     </section>
     <section>
       <h6><span class="n">3</span>Take these off the bench</h6>
-      <p>A disc still in its stack: take the top disc of that position.</p>
+      <p>Lift each chosen stack off its position whole; a disc of it on the cup or the anode is named.</p>
       <ul class="take">${take}</ul>
     </section>
     <p class="note">The robot does not move until you press Resume.</p>
@@ -149,16 +156,16 @@ function clearHtml() {
 // Confirm — apc's own: what leaves, the thing the operator guarantees,
 // and why. The platform sends it (Remove & replan).
 function confirmHtml() {
-  const chips = [..._st.crossed].sort((a, b) => a - b)
-    .map(i => `<span class="cchip"><b>${esc(discName(i))}</b> ${esc(whereIs(i))}</span>`).join("");
-  const n = _st.crossed.size;
+  const ch = chosen();
+  const chips = ch.map(e => `<span class="cchip"><b>${esc(e.name)}</b> ${e.live.length} disc${e.live.length === 1 ? "" : "s"}</span>`).join("");
+  const n = chosenDiscs().length;
   return `<div class="conf">
-    <h6>Leaves the run — ${n} disc${n === 1 ? "" : "s"}</h6>
+    <h6>Leaves the run — ${ch.length} stack${ch.length === 1 ? "" : "s"}, ${n} disc${n === 1 ? "" : "s"}</h6>
     <div class="cchips">${chips}</div>
     <div class="checks">
       <label class="check${_conf.bench ? " on" : ""}">
         <input type="checkbox" data-conf="bench" required${_conf.bench ? " checked" : ""}>
-        <span>I have taken these off the bench <span class="muted">— off the cup, the anode and the stack</span></span>
+        <span>I have taken these off the bench <span class="muted">— the stacks, and any disc of them on the cup or the anode</span></span>
       </label>
     </div>
     <p class="resume-note">On Resume the motors turn on and the robot moves — keep clear of the arm.</p>
@@ -186,25 +193,9 @@ export default {
 @media (max-width:720px) { .hmi.apc .why { grid-template-columns:1fr; } }
 .hmi.apc .card + .card { margin-top:var(--space-4); }
 .hmi.apc .legend i.badge { background:var(--accent); border-color:var(--accent); border-radius:999px; }
-/* the discs on offer: one chip each — name, where it is, what leaves with it */
-.hmi.apc .chips { display:flex; flex-wrap:wrap; gap:var(--space-2); width:100%; }
-.hmi.apc .chip { display:inline-flex; flex-direction:column; align-items:flex-start; gap:2px;
-  padding:8px 14px; border-radius:var(--radius-md); border:1px solid var(--border);
-  background:var(--surface); color:var(--text); text-align:left; line-height:1.2; cursor:pointer;
-  transition:border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease); }
-.hmi.apc .chip:hover { border-color:var(--accent); }
-.hmi.apc .chip b { font-size:var(--text-md); font-weight:700; }
-.hmi.apc .chip span { font-size:var(--text-sm); color:var(--muted); }
-.hmi.apc .chip .with { color:var(--text); }
-.hmi.apc .chip.x { border-color:var(--red); background:color-mix(in srgb, var(--red) 8%, var(--surface)); }
-.hmi.apc .chip.x b { text-decoration:line-through; color:var(--red); }
-.hmi.apc .chip.x b::before { content:"✕ "; text-decoration:none; display:inline-block; }
-.hmi.apc .none { margin:0; color:var(--muted); font-size:var(--text-md); }
-.hmi.apc .done { width:100%; }
-.hmi.apc .done summary { cursor:pointer; font-size:var(--text-md); font-weight:600; color:var(--text);
-  padding:var(--space-2) 0; }
-.hmi.apc .done summary .muted { font-weight:400; color:var(--muted); margin-left:var(--space-2); }
-.hmi.apc .done .chips { margin-top:var(--space-2); }
+.hmi.apc .legend i.skip { background:var(--c-full); opacity:.45; position:relative; overflow:hidden; }
+.hmi.apc .legend i.skip::after { content:""; position:absolute; inset:0;
+  background:linear-gradient(to top right, transparent 44%, var(--muted,#888) 44%, var(--muted,#888) 56%, transparent 56%); }
 .hmi.apc .clear { padding:var(--space-5); border:1px solid var(--border2); border-radius:var(--radius-lg);
   background:var(--surface); }
 .hmi.apc .how { display:flex; flex-direction:column; gap:var(--space-5); }
@@ -249,7 +240,7 @@ export default {
     _api = api;
     _offer = new Map((api.items || []).map(it => [Number(it.item), it]));
     _st = benchState(api);
-    _st.crossed = new Set();
+    _st.crossedPos = new Set();      // "in_1:3" — the stack positions chosen
     _step = "choose";
     _conf = { bench: false, reason: "" };
 
@@ -266,11 +257,12 @@ export default {
         return;
       }
       if (_step !== "choose") return;
-      const el = e.target.closest(".chip[data-i]");
-      if (!el) return;
-      const i = Number(el.dataset.i);
-      if (!_offer.has(i)) return;
-      _st.crossed.has(i) ? _st.crossed.delete(i) : _st.crossed.add(i);
+      // a stack position — on the bench (a well with discs in the run) or
+      // its chip below — toggles as one: every disc in it
+      const well = e.target.closest(".well.pos[data-h]");
+      const key = well ? `${well.dataset.h}:${well.dataset.i}` : null;
+      if (!key || !positions().some(p => p.key === key && p.live.length)) return;
+      _st.crossedPos.has(key) ? _st.crossedPos.delete(key) : _st.crossedPos.add(key);
       _conf.bench = false;     // a different choice: confirm the bench again
       render();
       _api.changed();
@@ -297,7 +289,7 @@ export default {
   },
 
   ready(step) {
-    if (!_st || !_st.crossed.size) return false;
+    if (!_st || !chosenDiscs().length) return false;
     if (step === "confirm") return _conf.bench && !!_conf.reason.trim();
     return true;
   },
@@ -321,7 +313,8 @@ export default {
     return "";
   },
 
+  // Every disc on offer in the chosen stacks — the offer's own items.
   value() {
-    return [..._st.crossed].map(i => _offer.get(i).item);
+    return chosenDiscs().map(i => _offer.get(i).item);
   },
 };

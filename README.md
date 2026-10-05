@@ -27,7 +27,7 @@ apc/
 │   ├── default.j2      # the kwargs: in_1 / in_2, one list of 7 per IN holder
 │   ├── setup.js        # run-setup screen, two steps — Bench (click each IN position full / empty), Final checks
 │   ├── pendant.js      # during-run screen — holders, tally, last reading
-│   └── replan.js       # the Replan choice on the bench — choose discs, clear the bench, confirm (imports setup.js)
+│   └── replan.js       # the Replan choice on the bench — choose stack positions (every disc in them leaves), clear the bench, confirm
 ├── scene/
 │   ├── core_500.j2     # chassis
 │   ├── layout.j2       # holders, anode/cathode, cameras, meter
