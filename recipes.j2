@@ -72,16 +72,16 @@ inspector_cls:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_cls, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {config: vision/disc_cls.yaml}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
-# Robot camera — the core-mounted PoE camera (no component, no motion
-# surface): the disc ON the anode right after placing, before the
-# measurement, top side.
+# Robot camera — inspection_poe_robot_1, the PoE camera riding the arm
+# (a component like any station, no motion surface): the disc ON the
+# anode right after placing, before the measurement, top side.
 inspector_robot:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {detection_name: top_od, detection_preset: {config: vision/disc_od.yaml}, speed_factor: {{ sf }}}
+  kwargs: {component: inspection_poe_robot_1, detection_name: top_od, detection_preset: {config: vision/disc_od.yaml}, speed_factor: {{ sf }}}
 
 inspector_robot_cls:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {detection_name: top_cls, detection_preset: {config: vision/disc_cls.yaml}, speed_factor: {{ sf }}}
+  kwargs: {component: inspection_poe_robot_1, detection_name: top_cls, detection_preset: {config: vision/disc_cls.yaml}, speed_factor: {{ sf }}}
 
 # Anode — plain base Recipe: pick/place the disc on the anode's "place"
 # anchor. Everything is explicit here — no station class inherited.

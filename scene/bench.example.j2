@@ -1,0 +1,21 @@
+{# Template for bench.j2 (git-ignored): copy it to bench.j2 and put THIS
+   unit's values in. core_500.j2 and layout.j2 import it:
+       {% import "bench.j2" as bench %}  ...  ip: "{{ bench.robot_ip }}"
+   New unit: copy bench.example.j2 to bench.j2 and fill it in. A name
+   missing here fails the render, naming it. Starts in simulation — the
+   placeholder addresses reach no hardware. #}
+
+{# simulation — robot_sim: the robot (core_500.j2); sim: every device in layout.j2 #}
+{% set robot_sim     = true %}
+{% set sim           = true %}
+
+{# the rail's measured zero on THIS unit, mm (core_500.j2 rail_cfg.offset) #}
+{% set rail_offset   = 0 %}
+
+{# addresses #}
+{% set robot_ip      = "0.0.0.0" %}
+{% set vision_ip     = "0.0.0.0" %}
+{% set vision_port   = 80 %}
+{% set camera_serial_station = "" %}
+{% set camera_serial_robot   = "" %}
+{% set meter_port    = "/dev/serial/by-id/..." %}

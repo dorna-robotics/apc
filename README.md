@@ -30,7 +30,9 @@ apc/
 ├── scene/
 │   ├── core_500.j2     # chassis
 │   ├── layout.j2       # holders, anode/cathode, cameras, meter
-│   └── calibration.j2  # layout.j2 with the probe rod mounted (calibrate.ipynb)
+│   ├── calibration.j2  # layout.j2 with the probe rod mounted (calibrate.ipynb)
+│   ├── bench.j2        # THIS unit: sim flags, rail offset, IPs, camera serials, meter port (git-ignored)
+│   └── bench.example.j2  # the committed template for bench.j2 — copy, fill in
 ├── components/         # anode, cathode (@register)
 ├── CAD/                # their .glb
 ├── vision/             # the detections: a config per model, the model beside it (below)

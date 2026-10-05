@@ -20,3 +20,6 @@ captures/
 
 # keys (vlm.key ...) beside the config that names them — vision-guide §9
 *.key
+
+# this unit's addresses and sim flags (scene/bench.example.j2 is the committed template)
+scene/bench.j2

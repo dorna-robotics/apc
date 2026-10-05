@@ -5,17 +5,17 @@
    pick approach (RRTConnect couldn't reach the goal). 60 already clears;
    100 gives comfortable margin across all holders. #}
 {%- set wall_offset = 100 -%}
+{%- import "bench.j2" as bench -%}
 core:
   type: "core"
-  simulation: false
-  ip: "10.0.1.10"
+  simulation: {{ bench.robot_sim }}
+  ip: "{{ bench.robot_ip }}"
   has_rail: true
   rail_cfg:
     type: "rail_hd_500mm"
-    offset: -94.09
+    offset: {{ bench.rail_offset }}
   has_tool_changer: true
   has_motion_plan: true
-  has_camera: false
   robot_attach:
     rail_carriage_anchor: "hole_1"
     robot_A0_anchor: "hole_0"
