@@ -62,7 +62,8 @@ export const HOLDERS = [
 ];
 const IN_HOLDERS  = HOLDERS.filter(h => h.in);
 const OUT_HOLDERS = HOLDERS.filter(h => !h.in);
-const OUT_NAMES   = OUT_HOLDERS.slice().reverse().map(h => h.label).join(", ");   // "Pass 1, Pass 2, Fail"
+const OUT_LABELS  = OUT_HOLDERS.slice().reverse().map(h => h.label);              // ["Pass 1", "Pass 2", "Fail"]
+const OUT_NAMES   = OUT_LABELS.slice(0, -1).join(", ") + " and " + OUT_LABELS[OUT_LABELS.length - 1];   // "Pass 1, Pass 2 and Fail"
 const N_IN_STACKS = IN_HOLDERS.length * SLOTS_N;            // 14 clickable positions
 
 // ── drawn at the 40 mL size ────────────────────────────────────────────
@@ -108,6 +109,12 @@ export const CSS = kitCss + wellCss({
    (width:100% — the kit centres grid items, which would shrink it to 0) */
 .hmi .rack.disc .sep { grid-column:1 / -1; width:100%; height:1px;
   background:var(--border); margin:3px 0; }
+/* the legend reads inline, like bna's: one line of swatches under the bench */
+.hmi.apc .legend { flex-direction:row; flex-wrap:wrap; gap:var(--space-4);
+  font-size:var(--text-xs); opacity:.85; color:inherit; }
+.hmi.apc .legend i { width:12px; height:12px; }
+/* a blocking message: bna's strip — the label, then the lines */
+.hmi .msg .lines { display:flex; flex-direction:column; gap:2px; line-height:1.5; min-width:0; }
 .hmi .legend i.full { background:var(--c-full); }
 .hmi .legend i.empty { background:var(--surface); border-color:var(--border);
   border-style:dashed; }
@@ -231,9 +238,6 @@ export function discPlace(st, disc) {
 }
 
 // ── validation — always live ───────────────────────────────────────────
-// ONE message box, always one line, so a click never changes the
-// screen's height: the modal is centred vertically by the platform, and
-// a taller screen would shift the bench under the operator's cursor.
 export function check(st) {
   const errs = [];
   const full = [];
@@ -248,17 +252,21 @@ export function check(st) {
 const CHECKS = [
   { key: "out",   text: `${OUT_NAMES} are empty.`,
     sub: "the drop counter starts at zero — a leftover disc would be stacked on" },
-  { key: "anode", text: "The anode is clear and the cathode is up.",
+  { key: "anode", text: "The anode is clear.",
     sub: "the first disc is placed there as soon as it is inspected" },
   { key: "meter", text: "The BK 879B is on and in RMT mode.",
     sub: "Measure pauses the run on anything else" },
 ];
 const checksOk = st => CHECKS.every(c => st.checks[c.key]);
 
+// Only the things that need a human. A screen that congratulates the
+// operator when nothing is wrong trains them to skim this strip, so
+// there is no "Ready" — the bench drawing shows the run (bna's rule).
 function msgHtml(V) {
   return V.errs.length
-    ? `<div class="msg m-bad"><b>Blocked</b><div>${esc(V.errs[0])}</div></div>`
-    : `<div class="msg m-good"><b>Ready</b><div></div></div>`;
+    ? `<div class="msg m-bad"><b>Blocking</b><div class="lines">` +
+      V.errs.map(t => `<span>${esc(t)}</span>`).join("") + `</div></div>`
+    : "";
 }
 
 // ── render ─────────────────────────────────────────────────────────────
