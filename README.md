@@ -19,14 +19,15 @@ the hand goes to the fail column as if it held one.
 ```
 apc/
 ├── main.py             # canonical entry point — byte-identical to examples/*/main.py
-├── launch.yaml         # project_name, port, scene, recipes, actions, checks, hmi pointers, core_dir, records/replays/uploads, folders
+├── launch.yaml         # project_name, port, scene, recipes, actions, checks, hmi pointers (default/setup/pendant/replan), core_dir, records/replays/uploads/counts, folders
 ├── actions.py          # predicates, setup(), Start → per-disc chain → Park, ROUTE
 ├── checks.py           # vision / sensor checks (empty)
 ├── recipes.j2          # holders, stations, meter — recipe aliases + solved ref_joints
 ├── hmi/
 │   ├── default.j2      # the kwargs: in_1 / in_2, one list of 7 per IN holder
-│   ├── setup.js        # run-setup screen — click each IN position full / empty
-│   └── pendant.js      # during-run screen — holders, tally, last reading
+│   ├── setup.js        # run-setup screen, two steps — Bench (click each IN position full / empty), Final checks
+│   ├── pendant.js      # during-run screen — holders, tally, last reading
+│   └── replan.js       # the Replan choice on the bench — choose discs, clear the bench, confirm (imports setup.js)
 ├── scene/
 │   ├── core_500.j2     # chassis
 │   ├── layout.j2       # holders, anode/cathode, cameras, meter

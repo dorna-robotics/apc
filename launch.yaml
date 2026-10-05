@@ -21,6 +21,7 @@ checks:       checks.py
 default:      hmi/default.j2       # the kwargs' defaults (data — Python reads it)
 setup:        hmi/setup.js         # run-setup screen: click the in stacks full/empty
 pendant:      hmi/pendant.js       # during-run screen: live holders, tally, last reading
+replan:       hmi/replan.js        # the Replan choice drawn on the bench: choose, clear the bench, confirm
 
 # Station-local state folder (calibrate.json, ik.json, path.json).
 # Relative to this folder, or absolute. Git-ignored — per-station truth.
