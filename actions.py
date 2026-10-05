@@ -55,8 +55,8 @@ AUDIT. One ``rt.record`` row per disc (project-guide §3), keyed
 ``disc <n>``: seeded by Create with where it came from, ``visual_bottom``
 / ``visual_top`` by the two inspections, ``c_f`` by Measure on a valid
 reading, ``result`` / ``out`` / ``reason`` by the drop, ``status`` derived
-from the facts at Park. The run's ``results/<start>/records.csv``
-is the client's sheet.
+from the facts at Park. The run's ``records/<start>/records.csv``
+(launch.yaml ``records:``) is the client's sheet.
 
 The DROP is ORDERED by a fill counter (ctx.meta["filled"]):
   * good fills out_good_1 completely, then out_good_2; bad fills out_bad_1.
@@ -520,6 +520,7 @@ class Pick(Action):
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — picking from {_pos(in_h, slot)}", active=(in_h, slot))
         rcp[f"disc_in_{in_h}"].pick(slot, **self.PRM)
+        rt.count("disc.picked", n=1)
         # One more taken from that position: the pendant's in-stack state
         # (full → done) is computed from this, never from the plan.
         taken = self.ctx.meta.setdefault("picked_from", {})
@@ -591,8 +592,10 @@ class InspectBottom(Action):
         _publish(self, f"{_tag(disc)} — inspecting")
         v = _inspect(self, "inspector", "inspector_cls")
         if v is None:
+            rt.count("inspect.bottom", read_failed=1)
             rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
             return False
+        rt.count("inspect.bottom", **{v: 1})        # v is "pass" / "fail" / "empty"
         rt.record(_tag(disc), visual_bottom="none" if v == "empty" else v)
         if v != "pass":
             why = "bottom camera: no disc" if v == "empty" else "bottom camera: fail"
@@ -684,8 +687,10 @@ class InspectTop(Action):
         _publish(self, f"{_tag(disc)} — inspecting on the anode")
         v = _inspect(self, "inspector_robot", "inspector_robot_cls")
         if v is None:
+            rt.count("inspect.top", read_failed=1)
             rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")
             return False
+        rt.count("inspect.top", **{v: 1})           # v is "pass" / "fail" / "empty"
         rt.record(_tag(disc), visual_top="none" if v == "empty" else v)
         if v != "pass":
             why = "top camera: no disc" if v == "empty" else "top camera: fail"
@@ -746,6 +751,7 @@ class Measure(Action):
             # so ``~measured(disc)`` still holds and the planner re-drives
             # Measure from observed state. Resume → this action runs again
             # → still unavailable → pauses again. One read per execute().
+            rt.count("measure", unavailable=1)
             rt.step(f"disc {disc + 1}: meter unavailable — reconnect the meter "
                     f"(check RMT is on), then Resume")
             rt.pause()
@@ -755,6 +761,7 @@ class Measure(Action):
         # a planning fact (it's per-disc runtime data, not plan state).
         self.ctx.meta.setdefault("disc_c", {})[disc] = m.primary
         rt.step(f"disc {disc + 1}: C = {m.primary:g} {m.primary_unit}")
+        rt.count("measure", n=1)
         rt.record(_tag(disc), c_f=m.primary, c_unit=str(m.primary_unit))
         # The value itself goes to the pendant's reading card (SI-scaled
         # there); the headline stays a step, not a number.
@@ -847,6 +854,8 @@ def _drop(action, disc, good, why) -> bool:
         ws.remove_component(_disc(disc))
 
     filled[holder] = count + 1
+    # one more disc through the bench: the total, and which column it went to
+    rt.count("disc.sorted", n=1, **{"good" if good else "bad": 1})
     key = "pass_n" if good else "fail_n"
     action.ctx.meta[key] = action.ctx.meta.get(key, 0) + 1
     name_out = dict(OUT_KEYS)[holder].replace("good_", "Pass ").replace("bad_", "Fail ")
@@ -900,6 +909,7 @@ class Park(Action):
     duration    = 5
     resource    = "robot"
     PARK_JOINTS = [0, 90, 0, 0, 0, 0, 100]
+    RUN_END     = "completed"      # rt.count("run") field: how this run ended
 
     def pre(self):
         # Every disc STILL IN THE RUN — a removed one is never done.
@@ -916,12 +926,16 @@ class Park(Action):
         # Status from the facts as they stand — "sorted" for a finished
         # disc, else the last fact it reached (an OperatorPark mid-run).
         facts = (getattr(self.ctx, "state", None) or {}).get("facts") or set()
+        n_removed = 0
         for d in self._ctx_all_objects().get("disc", []):
             if (created.name, d) not in facts:
                 continue                      # never entered the bench: no row
             remove = self._ctx_removed(d)
+            n_removed += int(bool(remove))
             rt.record(_tag(d), status=(f"removed: {remove['by']} -> {remove['outcome']} ({remove['phase']})"
                                        if remove else _status_of(facts, d)))
+        rt.count("disc.removed", n=n_removed)
+        rt.count("run", n=1, **{self.RUN_END: 1})
         # Move to the park pose. Recipe.park is a base move-to-joint
         # (collision-aware + a checkpoint so Pause/Resume stays live).
         rcp["robot"].park(joint=self.PARK_JOINTS)
@@ -933,6 +947,7 @@ class Park(Action):
 class OperatorPark(Park):
     """Operator-initiated park — fires on the Park button, outside the plan."""
     trigger = "park"
+    RUN_END = "operator_park"
 
 
 # The route — the order an item meets the actions (workspace.bt.protocol).

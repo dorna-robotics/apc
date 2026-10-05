@@ -8,15 +8,16 @@ core_ik.json
 core_path.json
 /core/
 
-# results_dir / data_dir / rec_dir (launch.yaml defaults) — run output,
-# operator uploads, replay recordings. Data, never source.
-results/
-data/
-rec/
-
-# captures/ — every detection's drawn frame, fetched from the vision unit
-# after each detect (actions.py _save_capture). Data, one jpg per detect.
+# the folders launch.yaml's records: / replays: / uploads: name — run
+# output, replay recordings, operator uploads. Data, never source.
+records/
+replays/
+uploads/
+# captures/ — every detection's frame, written on THIS machine by the
+# detections' display.client_save_* paths (vision/*.yaml). Data.
 captures/
+# counts/ — rt.count's totals (launch.yaml counts:) — across every run; data, never source
+counts/
 
 # keys (vlm.key ...) beside the config that names them — vision-guide §9
 *.key

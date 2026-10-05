@@ -22,6 +22,28 @@ default:      hmi/default.j2       # the kwargs' defaults (data — Python reads
 setup:        hmi/setup.js         # run-setup screen: click the in stacks full/empty
 pendant:      hmi/pendant.js       # during-run screen: live holders, tally, last reading
 
+# Station-local state folder (calibrate.json, ik.json, path.json).
+# Relative to this folder, or absolute. Git-ignored — per-station truth.
+core_dir:     core
+
+# Where the platform writes — relative to this folder, or absolute.
+# Not declared = off: run records stay in memory, no replay is saved,
+# a file parameter's Open has no folder.
+records:      records             # each run's rt.record files: <run>/records.jsonl, .csv — the per-disc sheet
+replays:      replays             # replay recordings
+uploads:      uploads             # where a file parameter's Open browses
+counts:       counts/counts.json  # rt.count's totals across every run: discs picked / sorted (n, good, bad), inspections, measures, runs
+
+# The file browser's tabs, in this order — display only: listing a
+# folder never makes anything be saved into it. captures/ is written by
+# the detections themselves (vision/*.yaml display.client_save_*).
+folders:
+  - {key: records,  label: Records,  path: records,  read_only: false}
+  - {key: uploads,  label: Uploads,  path: uploads,  read_only: false}
+  - {key: captures, label: Captures, path: captures, read_only: false}
+  - {key: replays,  label: Replays,  path: replays,  read_only: false}
+  - {key: counts,   label: Counts,   path: counts,   read_only: false}
+
 plan_window:  4
 scheduler:    cpsat
 

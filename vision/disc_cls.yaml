@@ -2,8 +2,10 @@
 # and inspector_robot_cls (top_cls), run on the detector's box grown by
 # CLS_ROI_OFFSET px, cropped. Every setting of the detection is here;
 # recipes.j2 only names this file (workspace docs/vision-guide.md §5 "Config files"). Every relative
-# path here is relative to THIS folder (vision/): the model beside it.
-# Nothing is kept on the vision unit (save_img / save_img_roi false).
+# path here is relative to THIS folder (vision/): the model beside it,
+# the pictures in ../captures/disc_cls/. Nothing is kept on the vision
+# unit (save_img / save_img_roi false); client_save_* write on THIS
+# machine, one file per run per detection (vision-guide §5).
 detection:
   cmd: cls
   path: disc_pass_fail_cropped.pkl
@@ -14,3 +16,5 @@ display:
   label: 1              # class + confidence drawn on the frame
   save_img: false
   save_img_roi: false
+  client_save_img: "../captures/disc_cls/"      # the annotated frame, one file per run
+  client_save_img_roi: "../captures/disc_cls/"  # the bare crop the model saw

@@ -2,8 +2,10 @@
 # inspector_robot (top_od, robot camera). Runs on the WHOLE frame, no ROI.
 # Every setting of the detection is here; recipes.j2 only names this file
 # (workspace docs/vision-guide.md §5 "Config files"). Every relative
-# path here is relative to THIS folder (vision/): the model beside it.
-# Nothing is kept on the vision unit (save_img / save_img_roi false).
+# path here is relative to THIS folder (vision/): the model beside it,
+# the pictures in ../captures/disc_od/. Nothing is kept on the vision
+# unit (save_img / save_img_roi false); client_save_* write on THIS
+# machine, one file per run per detection (vision-guide §5).
 detection:
   cmd: od
   path: disc.pkl
@@ -13,3 +15,5 @@ display:
   label: 1              # class + confidence drawn on the frame
   save_img: false
   save_img_roi: false
+  client_save_img: "../captures/disc_od/"      # the annotated frame, one file per run
+  client_save_img_roi: "../captures/disc_od/"  # the bare frame the model saw

@@ -19,7 +19,7 @@ the hand goes to the fail column as if it held one.
 ```
 apc/
 ├── main.py             # canonical entry point — byte-identical to examples/*/main.py
-├── launch.yaml         # project_name, port, scene, recipes, actions, checks, hmi pointers
+├── launch.yaml         # project_name, port, scene, recipes, actions, checks, hmi pointers, core_dir, records/replays/uploads, folders
 ├── actions.py          # predicates, setup(), Start → per-disc chain → Park, ROUTE
 ├── checks.py           # vision / sensor checks (empty)
 ├── recipes.j2          # holders, stations, meter — recipe aliases + solved ref_joints
@@ -36,22 +36,33 @@ apc/
 ├── components/         # anode, cathode (@register)
 ├── CAD/                # their .glb
 ├── vision/             # the detections: a config per model, the model beside it (below)
-├── captures/           # every detection's drawn frame, one jpg per detect (git-ignored)
 ├── dev/camera/         # camera bring-up notebook
-└── core/               # this bench: calibration, caches, motion book (git-ignored)
+├── core/               # this bench: calibration, caches, motion book (git-ignored)
+├── records/            # one folder per run: records.jsonl, records.csv — the per-disc sheet (git-ignored)
+├── replays/            # replay recordings (git-ignored)
+├── uploads/            # operator input files — a file parameter's Open (git-ignored)
+├── captures/           # the detections' pictures, one file per run per detection (git-ignored)
+└── counts/             # rt.count's totals across every run — counts.json (git-ignored)
 ```
 
-`results/` (one folder per run, `records.csv`), `data/` (operator
-uploads) and `rec/` (replay recordings) are the platform's defaults for
-this folder and are git-ignored.
+The last five are data folders, never source: `records:`, `replays:`,
+`uploads:` and `counts:` in `launch.yaml` say where the platform writes,
+`captures/` is where the detections' `client_save_*` paths point, and
+`folders:` lists all five as file-browser tabs. The orchestrator creates
+them at launch. Counted across runs (`rt.count`): `disc.picked`,
+`inspect.bottom` / `inspect.top` (pass, fail, empty, read_failed),
+`measure` (n, unavailable), `disc.sorted` (n = every disc processed to
+the end, good, bad), `disc.removed`, `run` (completed, operator_park).
 
 ## `vision/` — the detections
 
 Each trained model sits beside the config that names it, checked in with
 the project like the CAD: they are bench assets, not operator uploads.
 A config's paths resolve against `vision/` itself (vision-guide §5
-"Config files"); a key for a vlm config goes beside it as `*.key`,
-git-ignored. `vision/` is not a file-browser tab.
+"Config files"): the model beside it, the pictures in
+`../captures/<config name>/` (`display.client_save_*`, written on this
+machine, one file per run per detection); a key for a vlm config goes
+beside it as `*.key`, git-ignored. `vision/` is not a file-browser tab.
 
 | config | model | type | for |
 |---|---|---|---|
