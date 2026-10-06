@@ -832,12 +832,6 @@ class PickAnode(Action):
         return "off_anode"
 
 
-# soft_approach=True: stop at the gap above the OUT slot and take the
-# final descent as its own straight leg — under smove travel the blended
-# approach curved close enough to brush the rack (bench, replay-recorded).
-DROP_PRM = dict(gravity_offset=PLACE_GRAV, soft_approach=True)
-
-
 def _drop(action, disc, good, why) -> bool:
     """Drop the held disc into the next ordered slot of the good or bad
     holders (fill counter), then DELETE it — sorted discs are terminal and
@@ -857,7 +851,7 @@ def _drop(action, disc, good, why) -> bool:
     # Place the held disc into the ordered slot, then DELETE it. Nothing
     # accumulates (no meshes/pickables piling up over ~3500 discs); the
     # fill counter, not the scene, tracks where the next disc goes.
-    rcp[holder].place(slot, offset=[0, 0, z, 0, 0, 0], **DROP_PRM)
+    rcp[holder].place(slot, offset=[0, 0, z, 0, 0, 0], **Sort.DROP_PRM)
     if _disc(disc) in ws.components:
         ws.remove_component(_disc(disc))
 
@@ -882,6 +876,16 @@ class Sort(Action):
     # Ordered OUT-holder fill sequences (recipe aliases, in fill order).
     GOOD_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
     BAD_HOLDERS  = ["disc_out_bad_1"]
+    # The place into ANY out holder (good and bad — Sort and Reject both
+    # drop through _drop):
+    #   soft_approach=True  stop at the gap above the slot and take the
+    #       final descent as its own straight leg — under smove travel the
+    #       blended approach curved close enough to brush the rack (bench,
+    #       replay-recorded).
+    #   soft_exit=True      the mirror on the way out: the pull-off to the
+    #       gap is its own straight leg ending at a stop, then the lift —
+    #       never a fused curve inside the stack.
+    DROP_PRM = dict(gravity_offset=PLACE_GRAV, soft_approach=True, soft_exit=True)
     params   = ["disc"]
     duration = 10
     resource = "robot"
