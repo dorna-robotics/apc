@@ -77,9 +77,10 @@ NOTE: no tool swapping — the suction gripper is mounted on the robot
 
 PENDANT. Every action publishes the operator-facing picture through
 rt.op() (see _publish): a one-line headline in the operator's words, the
-five holders as per-position STATES (never counts — the operator never
-typed one), the pass/fail tally and the last reading. hmi/pendant.js
-binds to exactly these keys; change them together.
+five holders as per-position STATES and COUNTS (discs left in each IN
+position, discs in each OUT position), the pass/fail tally and the last
+reading. hmi/pendant.js binds to exactly these keys; change them
+together.
 """
 
 from __future__ import annotations
@@ -138,6 +139,15 @@ MAX_PER_SLOT = 255                             # discs per slot before next slot
 # grown by this many px (roi.offset on the box corners), cropped — the
 # model was trained on cropped discs (vision/disc_pass_fail_cropped.pkl).
 CLS_ROI_OFFSET     = 100
+# Classifier SENSITIVITY — the ``classifier`` kwarg (hmi/default.j2, set on
+# the setup screen). The model gives a probability that the disc is a
+# pass; a disc passes only if that probability clears the threshold.
+# high catches the most (a pass needs 75 %), medium is the model's own
+# call (50 %), low lets more through (25 %). ignore skips the classifier
+# altogether — the detector still has to see a disc — and the sort is by
+# the reading alone. setup() writes CLS_MODE from the kwarg.
+CLS_MODES          = {"high": 0.75, "medium": 0.50, "low": 0.25, "ignore": None}
+CLS_MODE           = "medium"
 
 # Suction motion offsets (mirror the runtime example).
 PICK_TCP_Z   = -5                             # suction drives deeper to grab
@@ -176,11 +186,29 @@ def _disc(disc: int) -> str:
     return f"disc_{disc}"
 
 
+def _pass_prob(res) -> float:
+    """The classifier's probability that the disc is a pass, from its ONE
+    entry — the top class and its probability (vision/disc_cls.yaml,
+    top_k 1). Two classes, so a top ``fail`` at p means pass at 1 - p.
+    0 when the result is empty."""
+    if not res:
+        return 0.0
+    top = res[0]
+    try:
+        p = float(top.get("conf", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+    return p if top.get("cls") == "pass" else 1.0 - p
+
+
 def _verdict(res) -> str:
-    """The classifier's word. ``pass`` only when its top class says so;
-    anything else — ``fail``, or no class above conf (an empty list) — is
-    a fail. A disc the model cannot vouch for never reaches the anode."""
-    return "pass" if res and res[0].get("cls") == "pass" else "fail"
+    """The classifier's word under the run's sensitivity: ``pass`` only
+    when its pass probability clears CLS_MODES[CLS_MODE]. An empty result
+    is a fail — a disc the model cannot vouch for never reaches the anode."""
+    threshold = CLS_MODES[CLS_MODE]
+    if threshold is None:
+        return "pass"            # ignore: the classifier has no say
+    return "pass" if _pass_prob(res) >= threshold else "fail"
 
 
 def _inspect(action, od_alias, cls_alias):
@@ -211,18 +239,24 @@ def _inspect(action, od_alias, cls_alias):
     # px) and what the classifier was handed. If the crop on the vision
     # unit does not match these numbers, the fault is downstream of here.
     xs = [c[0] for c in box]; ys = [c[1] for c in box]
+    threshold = CLS_MODES[CLS_MODE]
     action.ctx.runtime.step(
         f"{od_alias}: {len(found)} found, best {best.get('conf', 0):.2f} at "
         f"x {min(xs):.0f}..{max(xs):.0f} y {min(ys):.0f}..{max(ys):.0f} "
-        f"({max(xs) - min(xs):.0f}x{max(ys) - min(ys):.0f} px) -> {cls_alias} roi +{CLS_ROI_OFFSET} px")
+        f"({max(xs) - min(xs):.0f}x{max(ys) - min(ys):.0f} px)"
+        + (f" -> {cls_alias} roi +{CLS_ROI_OFFSET} px" if threshold is not None
+           else " -> classifier ignored, pass"))
+    if threshold is None:
+        return "pass"            # ignore: the detector saw a disc, the reading decides
     res = rcp[cls_alias].detect(
         roi={"corners": box, "offset": CLS_ROI_OFFSET, "crop": True},
         sim_return=[{"cls": "pass", "conf": 0.99}])
     if res is None:
         return None
-    if res:
-        action.ctx.runtime.step(f"{cls_alias}: {res[0].get('cls')} {res[0].get('conf', 0):.2f}")
-    return _verdict(res)
+    v = _verdict(res)
+    action.ctx.runtime.step(
+        f"{cls_alias}: pass {_pass_prob(res):.2f} vs {threshold:.2f} ({CLS_MODE}) -> {v}")
+    return v
 
 
 # ── IN inventory ──────────────────────────────────────────────────────
@@ -239,16 +273,23 @@ LOADED: dict = {}      # (in_holder, slot) → discs loaded there
 
 
 def _progress_pct(action):
-    discs = action._ctx_all_objects().get("disc", [])
-    total = (len(discs) or 1) * _STEPS
-    ctx_state = getattr(action.ctx, "state", None) or {}
-    facts = ctx_state.get("facts") or set()
-    done = 0
+    """Discs SETTLED over discs in the batch, the disc in flight counted
+    by how far along its chain it is. A disc is settled when it is done
+    (sorted or rejected — a rejected disc takes 5 steps, not 12, and
+    still counts as one whole disc) or removed by the operator. 100 only
+    when every disc is settled; Park says 100 itself."""
+    discs = list(action._ctx_all_objects().get("disc", []))
+    if not discs:
+        return 0
+    facts = (getattr(action.ctx, "state", None) or {}).get("facts") or set()
+    acc = 0.0
     for d in discs:
-        for p in _CHAIN:
-            if (p.name, d) in facts:
-                done += 1
-    return int((done + 1) / total * 100)
+        if (done.name, d) in facts or action._ctx_removed(d):
+            acc += 1.0
+        else:
+            reached = sum(1 for p in _CHAIN if (p.name, d) in facts)
+            acc += min(reached, _STEPS - 1) / _STEPS
+    return int(acc / len(discs) * 100)
 
 
 # The per-disc chain in order — what progress and the audit status read.
@@ -297,18 +338,24 @@ def _in_states(loaded, picked, active=None):
     return out
 
 
+def _in_left(loaded, picked):
+    """Per-position discs STILL IN each IN holder — loaded minus taken.
+    The number the pendant writes in the well; 0 where nothing was loaded."""
+    return {f"in_{h}": [max(0, loaded.get((h, slot), 0) - picked.get((h, slot), 0))
+                        for slot in SLOTS] for h in (1, 2)}
+
+
+def _out_counts(filled):
+    """Per-position discs IN each OUT holder, from the same fill counter
+    Sort uses (_next_drop): slots fill A1→A7, MAX_PER_SLOT each."""
+    return {key: [max(0, min(MAX_PER_SLOT, filled.get(alias, 0) - i * MAX_PER_SLOT))
+                  for i in range(len(SLOTS))] for alias, key in OUT_KEYS}
+
+
 def _out_states(filled):
-    """Per-position state of the three OUT holders, from the same fill
-    counter Sort uses (_next_drop): empty | filling | full."""
-    out = {}
-    for alias, key in OUT_KEYS:
-        c = filled.get(alias, 0)
-        row = []
-        for i in range(len(SLOTS)):
-            n = max(0, min(MAX_PER_SLOT, c - i * MAX_PER_SLOT))
-            row.append("empty" if n == 0 else "full" if n >= MAX_PER_SLOT else "filling")
-        out[key] = row
-    return out
+    """Per-position state of the three OUT holders: empty | filling | full."""
+    return {key: ["empty" if n == 0 else "full" if n >= MAX_PER_SLOT else "filling"
+                  for n in row] for key, row in _out_counts(filled).items()}
 
 
 def _tag(disc):
@@ -326,11 +373,14 @@ def _publish(action, headline=None, active=None, **extra):
     meta = action.ctx.meta
     vals = dict(
         in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active),
+        in_left=_in_left(LOADED, meta.get("picked_from", {})),
         out_stacks=_out_states(meta.get("filled", {})),
+        out_counts=_out_counts(meta.get("filled", {})),
         total_n=len(INVENTORY),
         pass_n=meta.get("pass_n", 0),
         fail_n=meta.get("fail_n", 0),
         done_n=meta.get("pass_n", 0) + meta.get("fail_n", 0),
+        progress=_progress_pct(action),       # the pendant's bar, same figure as the step bar
     )
     if headline is not None:
         vals["headline"] = headline
@@ -369,6 +419,12 @@ def setup(**kwargs):
 
     in_1 = _counts("in_1", [1] * len(SLOTS))
     in_2 = _counts("in_2", [0] * len(SLOTS))
+
+    # Classifier sensitivity — one of CLS_MODES; anything else (a typo
+    # from a headless caller) is the model's own call, said so in the log.
+    global CLS_MODE
+    mode = str(kwargs.get("classifier", "medium") or "medium").strip().lower()
+    CLS_MODE = mode if mode in CLS_MODES else "medium"
 
     INVENTORY.clear()
     LOADED.clear()
@@ -436,6 +492,9 @@ class Start(Action):
         self.ctx.meta["fail_n"] = 0
         _publish(self, "Starting — homing", last_disc=None, last_c=None,
                  last_c_unit=None, last_result=None)
+        thr = CLS_MODES[CLS_MODE]
+        rt.step("classifier: ignored — the detector must see a disc, the reading sorts"
+                if thr is None else f"classifier: {CLS_MODE} — a pass needs ≥ {thr:.0%}")
         rt.motor(1)
         # Home the rail before any move that assumes a homed axis:
         # set_axis_with_stop configures the axis + PID and homes against
@@ -629,7 +688,8 @@ class Reject(Action):
 
     def execute(self, disc):
         why = self.ctx.meta.get("verdict", {}).get(disc, "bottom camera")
-        return "rejected" if _drop(self, disc, good=False, why=why) else False
+        held = why != "bottom camera: no disc"
+        return "rejected" if _drop(self, disc, good=False, why=why, held=held) else False
 
 
 class PlaceAnode(Action):
@@ -832,11 +892,20 @@ class PickAnode(Action):
         return "off_anode"
 
 
-def _drop(action, disc, good, why) -> bool:
+def _drop(action, disc, good, why, held=True) -> bool:
     """Drop the held disc into the next ordered slot of the good or bad
     holders (fill counter), then DELETE it — sorted discs are terminal and
     never linger in the scene. Shared by Sort and Reject. False when every
-    holder of that kind is full (the action fails, the run pauses)."""
+    holder of that kind is full (the action fails, the run pauses).
+
+    ``held=False`` — the bottom camera saw NOTHING in the gripper (the
+    stack ran out before the operator's mark, or the suction missed). The
+    motion still runs as asked, but nothing lands: the holder's fill
+    count and the pass/fail tallies do not move. Counting air would lift
+    the bad column's next target 0.254 mm per phantom — a stack marked
+    full that held 127 discs would put the next real drop 32 mm in the
+    air. Under-counting a disc the detector merely missed costs one
+    0.254 mm press on a compliant place — the safe direction."""
     rt, rcp, ws = action.ctx.runtime, action.ctx.recipes, action.ctx.workspace
     holders = Sort.GOOD_HOLDERS if good else Sort.BAD_HOLDERS
     filled = action.ctx.meta.setdefault("filled", {})   # holder → n dropped
@@ -854,13 +923,18 @@ def _drop(action, disc, good, why) -> bool:
     rcp[holder].place(slot, offset=[0, 0, z, 0, 0, 0], **Sort.DROP_PRM)
     if _disc(disc) in ws.components:
         ws.remove_component(_disc(disc))
+    name_out = dict(OUT_KEYS)[holder].replace("good_", "Pass ").replace("bad_", "Fail ")
+    if not held:
+        rt.step(f"disc {disc + 1}: nothing was in the gripper — {holder}[{slot}] count stays {count}")
+        _publish(action, f"{_tag(disc)} — nothing in the gripper, column not counted")
+        rt.record(_tag(disc), result="fail", out=f"{name_out} {slot} (empty hand)", reason=why)
+        return True
 
     filled[holder] = count + 1
     # one more disc through the bench: the total, and which column it went to
     rt.count("disc.sorted", n=1, **{"good" if good else "bad": 1})
     key = "pass_n" if good else "fail_n"
     action.ctx.meta[key] = action.ctx.meta.get(key, 0) + 1
-    name_out = dict(OUT_KEYS)[holder].replace("good_", "Pass ").replace("bad_", "Fail ")
     _publish(action, f"{_tag(disc)} — {'passed' if good else 'failed'} → {name_out} {slot}")
     rt.record(_tag(disc), result="pass" if good else "fail", out=f"{name_out} {slot}", reason=why)
     return True
@@ -951,8 +1025,9 @@ class Park(Action):
         # Move to the park pose. Recipe.park is a base move-to-joint
         # (collision-aware + a checkpoint so Pause/Resume stays live).
         rcp["robot"].park(joint=self.PARK_JOINTS)
+        rt.step(100, level="progress")
         meta = self.ctx.meta
-        _publish(self, f"Parked — {meta.get('pass_n', 0)} passed, {meta.get('fail_n', 0)} failed")
+        _publish(self, "Parked")     # the tally line carries the counts
         return "parked"
 
 

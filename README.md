@@ -9,7 +9,11 @@ through the bench at a time, `ROUTE` at the bottom of `actions.py`.
 
 Each inspection is two models on one camera: the detector finds the
 disc, the classifier judges the crop around its box (`CLS_ROI_OFFSET`
-px of margin). A classifier fail at either camera sends the disc to
+px of margin). How sure the classifier must be is the run's
+`classifier` setting on the setup screen: high (a pass needs 75 %),
+medium (50 %, the model's own call), low (25 %), or ignore (no
+classifier at all — the detector still has to see a disc, the
+capacitance reading alone sorts). A classifier fail at either camera sends the disc to
 the fail column with no measurement. A disc the detector does not see
 at either camera is a fail too: the suction is never released mid-way,
 the hand goes to the fail column as if it held one.
@@ -42,7 +46,7 @@ apc/
 ├── records/            # one folder per run: records.jsonl, records.csv — the per-disc sheet (git-ignored)
 ├── replays/            # replay recordings (git-ignored)
 ├── uploads/            # operator input files — a file parameter's Open (git-ignored)
-├── captures/           # the detections' pictures, one file per run per detection (git-ignored)
+├── captures/           # the detections' pictures, one file per run per detection (git-ignored; saving off for now)
 ├── counts/             # rt.count's totals across every run — counts.json (git-ignored)
 └── log/                # the project's console — workspace.log, written by the orchestrator (git-ignored)
 ```
@@ -64,8 +68,10 @@ the project like the CAD: they are bench assets, not operator uploads.
 A config's paths resolve against `vision/` itself (vision-guide §5
 "Config files"): the model beside it, the pictures in
 `../captures/<config name>/` (`display.client_save_*`, written on this
-machine, one file per run per detection); a key for a vlm config goes
-beside it as `*.key`, git-ignored. `vision/` is not a file-browser tab.
+machine, one file per run per detection — OFF for now, every save key
+false; `label: 1` only draws on the live view); a key for a vlm config
+goes beside it as `*.key`, git-ignored. `vision/` is not a file-browser
+tab.
 
 | config | model | type | for |
 |---|---|---|---|
@@ -74,10 +80,7 @@ beside it as `*.key`, git-ignored. `vision/` is not a file-browser tab.
 
 `recipes.j2` registers four detections — `bottom_od` / `bottom_cls` on
 the station camera, `top_od` / `top_cls` on the robot camera — one
-Inspector recipe each. The drawn frames are to land in
-`captures/<detection>/` next to the run's records, pushed by the vision
-unit after each detect (server-side work, pending); until then nothing
-is saved anywhere. An action never waits on a picture. Each detection is
+Inspector recipe each. Each detection is
 `detection_preset: {config: vision/disc_od.yaml}` — a relative path is
 relative to the file it is written in: `config:` to recipes.j2, the
 paths inside the config to `vision/`; the client ships the model's bytes to the vision unit at

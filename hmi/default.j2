@@ -29,3 +29,10 @@
 # plan" (the same caveat bna documents). Trust a real windowed run.
 in_1: [0, 0, 0, 0, 0, 0, 0]
 in_2: [0, 0, 0, 0, 0, 0, 0]
+
+# Classifier sensitivity — how sure the pass/fail model must be before a
+# disc PASSES its visual check: high (a pass needs 75 %), medium (50 %,
+# the model's own call), low (25 %), or ignore (no classifier at all —
+# the detector still has to see a disc; the sort is by the reading
+# alone). The threshold table is CLS_MODES in actions.py.
+classifier: medium
