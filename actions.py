@@ -618,7 +618,7 @@ class Pick(Action):
     # The vibrate: the carriage 2 mm each way, twice, every arm joint held;
     # the disc's bottom VIBRATE_BELOW_RIM mm under the rim when it happens.
     VIBRATE_PRM = dict(primitive="rail", pattern=[2, -2], cnt=2, vaj=[100, 500, 2000])
-    VIBRATE_BELOW_RIM = 5
+    VIBRATE_BELOW_RIM = 10
     params   = ["disc"]
     duration = 13          # the pick, plus the vibrate inside the holder
     resource = "robot"
