@@ -48,6 +48,7 @@ folders:
   - {key: replays,  label: Replays,  path: replays,  read_only: false}
   - {key: counts,   label: Counts,   path: counts,   read_only: false}
   - {key: log,      label: Log,      path: log,      read_only: true}   # the project's console, orchestrator-written
+  - {key: docs,     label: Docs,     path: docs,     read_only: true}   # the bench's sheets (LCR meter startup) — source, read here, edited in git
 
 plan_window:  4
 scheduler:    cpsat

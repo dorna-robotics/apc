@@ -47,14 +47,17 @@ apc/
 ├── uploads/            # operator input files — a file parameter's Open (git-ignored)
 ├── captures/           # the detections' pictures, one file per run per detection (git-ignored; saving off for now)
 ├── counts/             # rt.count's totals across every run — counts.json (git-ignored)
-└── log/                # the project's console — workspace.log, written by the orchestrator (git-ignored)
+├── log/                # the project's console — workspace.log, written by the orchestrator (git-ignored)
+└── docs/               # the bench's sheets (LCR meter startup) — source, a read-only Docs tab
 ```
 
 The last six are data folders, never source: `records:`, `replays:`,
 `uploads:` and `counts:` in `launch.yaml` say where the platform writes,
 `captures/` is where the detections' `client_save_*` paths point,
 `log/` is where the orchestrator keeps the project's console, and
-`folders:` lists all six as file-browser tabs (Log read-only). The
+`folders:` lists all six as file-browser tabs (Log read-only), plus
+`docs/` — source, not data — as a read-only Docs tab: a markdown sheet
+renders in the pane, a PDF opens in it. The
 orchestrator creates them at launch. Counted across runs (`rt.count`): `disc.picked`,
 `inspect.bottom` / `inspect.top` (pass, fail, empty, read_failed),
 `measure` (n, unavailable), `disc.sorted` (n = every disc processed to
