@@ -5,10 +5,14 @@
 # path here is relative to THIS folder (vision/): the model beside it,
 # the pictures in ../captures/disc_cls/. Nothing is kept on the vision
 # unit (save_img / save_img_roi false); client_save_* write on THIS
-# machine, one file per run per detection (vision-guide §5).
+# machine, one file per run per detection (vision-guide §5) — OFF for
+# now (false); to save again, point them at "../captures/disc_cls/".
 detection:
   cmd: cls
   path: disc_pass_fail_cropped.pkl
+  # The top class and its probability. Two classes, so the other one is
+  # 1 - conf: actions.py derives P(pass) from this one entry and applies
+  # the run's sensitivity (the ``classifier`` kwarg — CLS_MODES) itself.
   conf: 0.5
   top_k: 1
 frames_avg: 1
@@ -16,5 +20,5 @@ display:
   label: 1              # class + confidence drawn on the frame
   save_img: false
   save_img_roi: false
-  client_save_img: "../captures/disc_cls/"      # the annotated frame, one file per run
-  client_save_img_roi: "../captures/disc_cls/"  # the bare crop the model saw
+  client_save_img: false          # off for now — "../captures/disc_cls/" to keep the annotated frame
+  client_save_img_roi: false      # off for now — "../captures/disc_cls/" to keep the bare crop the model saw

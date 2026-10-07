@@ -5,7 +5,8 @@
 # path here is relative to THIS folder (vision/): the model beside it,
 # the pictures in ../captures/disc_od/. Nothing is kept on the vision
 # unit (save_img / save_img_roi false); client_save_* write on THIS
-# machine, one file per run per detection (vision-guide §5).
+# machine, one file per run per detection (vision-guide §5) — OFF for
+# now (false); to save again, point them at "../captures/disc_od/".
 detection:
   cmd: od
   path: disc.pkl
@@ -15,5 +16,5 @@ display:
   label: 1              # class + confidence drawn on the frame
   save_img: false
   save_img_roi: false
-  client_save_img: "../captures/disc_od/"      # the annotated frame, one file per run
-  client_save_img_roi: "../captures/disc_od/"  # the bare frame the model saw
+  client_save_img: false          # off for now — "../captures/disc_od/" to keep the annotated frame
+  client_save_img_roi: false      # off for now — "../captures/disc_od/" to keep the bare frame the model saw

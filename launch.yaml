@@ -37,7 +37,8 @@ counts:       counts/counts.json  # rt.count's totals across every run: discs pi
 
 # The file browser's tabs, in this order — display only: listing a
 # folder never makes anything be saved into it. captures/ is written by
-# the detections themselves (vision/*.yaml display.client_save_*).
+# the detections themselves (vision/*.yaml display.client_save_*) — off
+# for now, the tab stays.
 folders:
   - {key: records,  label: Records,  path: records,  read_only: false}
   - {key: uploads,  label: Uploads,  path: uploads,  read_only: false}
