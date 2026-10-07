@@ -102,10 +102,12 @@ export const CSS = kitCss + wellCss({
 /* the bench is a picture: centred under its title, which stays left like
    every field label of the generic form */
 .hmi.apc .card .inner { align-items:center; }
-/* room for a hovered circle (the kit scales it 1.06) to grow WITHOUT
-   spilling out of the scroll wrapper — a spill adds a scrollbar and the
-   whole screen jumps under the cursor */
-.hmi.apc .scroll { padding:6px; }
+/* room for a hovered circle to grow WITHOUT spilling out of the scroll
+   wrapper — a spill adds a scrollbar and the screen jumps under the
+   cursor. The count pill sits 6 px outside the circle, and the hover
+   scale (1.06 toggle, 1.12 pick) carries it another 2-4 px: 14 px of
+   room on every side covers the worst case */
+.hmi.apc .scroll { padding:14px; }
 /* the bench: five holder rows in one grid, A1 on the left */
 .hmi .rack.disc { grid-template-columns:${GUTTER}px repeat(${SLOTS_N}, ${CELL}px);
   gap:${GAP}px; justify-content:center; }
