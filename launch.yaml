@@ -9,7 +9,8 @@
 # Per disc: create at its inventory position → pick → inspect → place on
 # anode → cathode down → read C → cathode up → pick → sort to out good/bad
 # by the capacitance window (C_MIN..C_MAX in actions.py). Ordered drop:
-# good fills out_good_1 then _2, bad fills out_bad_1; slots A1→A7, z steps
+# pass fills out_good_1 then _2 (A1→A7); a fail by the reading fills out_bad_1
+# A1→A5, a fail by a camera out_bad_1 A6→A7 (LANES in actions.py); z steps
 # by Z_STEP per disc, max stack_size per slot. Every sorted disc is
 # deleted right after it's placed; Start sweeps leftovers from killed runs.
 

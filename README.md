@@ -38,8 +38,7 @@ apc/
 │   ├── calibration.j2  # layout.j2 with the probe rod mounted (calibrate.ipynb)
 │   ├── bench.j2        # THIS unit: sim flags, rail offset, IPs, camera serials, meter port (git-ignored)
 │   └── bench.example.j2  # the committed template for bench.j2 — copy, fill in
-├── components/         # anode, cathode (@register)
-├── CAD/                # their .glb
+├── components/         # one folder per component: anode/, cathode/ — class + .glb together
 ├── vision/             # the detections: a config per model, the model beside it (below)
 ├── dev/camera/         # camera bring-up notebook
 ├── core/               # this bench: calibration, caches, motion book (git-ignored)

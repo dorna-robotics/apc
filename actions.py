@@ -17,7 +17,11 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
 
    1. Create        spawn the disc at its inventory position (top of the
                     remaining stack at its in-holder anchor).
-   2. Pick          suction-pick it off the IN stack.
+   2. Pick          suction-pick it off the IN stack: grab, lift straight
+                    up to a few mm under the holder's rim — the disc still
+                    inside the holder — shake the rail alone (a second
+                    disc stuck underneath falls back onto the stack, never
+                    outside), then lift straight out. Pick.PRM / VIBRATE_PRM.
    3. Present       carry it to the vertical inspection station.
    4. InspectBottom station camera: DETECT the disc (vision/disc_od.yaml), then
                     CLASSIFY the same view cropped to its box + CLS_ROI_OFFSET
@@ -40,9 +44,10 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
    9. Measure       read the multimeter capacitance → record it for the disc.
   10. CathodeUp     retract the cylinder (cathode up).
   11. PickAnode     suction-pick the disc back off the anode.
-  12. Sort          drop it into an OUT holder: a top-camera fail → bad;
-                    else C_MIN ≤ C ≤ C_MAX → good (fill out_good_1, then
-                    _2), otherwise bad (out_bad_1). Ordered fill (below).
+  12. Sort          drop it into an OUT holder by its LANE (LANES): a
+                    camera fail → the fail holder's A6–A7; a reading
+                    outside C_MIN..C_MAX → the fail holder's A1–A5; a pass
+                    → the pass holders, out_good_1 then _2. Ordered fill.
 
 Then Park once every disc is DONE — sorted or rejected. ``done`` is the
 closure fact every way out asserts. ``ROUTE`` at the bottom of this
@@ -59,11 +64,13 @@ reading, ``result`` / ``out`` / ``reason`` by the drop, ``status`` derived
 from the facts at Park. The run's ``records/<start>/records.csv``
 (launch.yaml ``records:``) is the client's sheet.
 
-The DROP is ORDERED by a fill counter (ctx.meta["filled"]):
-  * good fills out_good_1 completely, then out_good_2; bad fills out_bad_1.
-  * within a holder: slots A1 → A7 in order.
-  * within a slot: z starts at 0 and steps by Z_STEP per disc, up to
-    MAX_PER_SLOT discs.
+The DROP is ORDERED by a fill counter (ctx.meta["filled"]) along a LANE —
+an ordered list of (holder, slot) positions, one lane per verdict (LANES):
+  * pass          out_good_1 A1→A7, then out_good_2 A1→A7
+  * fail_measure  out_bad_1 A1→A5 — the reading outside the window
+  * fail_visual   out_bad_1 A6→A7 — a camera said fail, or saw no disc
+  * within a position: z starts at 0 and steps by Z_STEP per disc, up to
+    MAX_PER_SLOT discs, then the lane's next position.
 Every sorted disc is DELETED right after place() — sorted discs are
 terminal, so nothing accumulates in the scene. Start additionally sweeps
 any disc_* component left over from a previous run that was killed or
@@ -174,27 +181,35 @@ PLACE_GRAV   = -5                              # suction presses on release
 _STEPS = 12                                    # per-disc steps for progress (nominal)
 
 
-# ── Ordered-drop position — a simple counter ──────────────────────────
-# Where the next disc goes is tracked by a per-holder fill COUNT in
-# ctx.meta["filled"] = {holder_alias: n_dropped}. From the count we derive
-# (slot, z) deterministically: slot = SLOTS[count // MAX_PER_SLOT], z =
-# (count % MAX_PER_SLOT) * Z_STEP; roll to the next holder when the current
-# is full. This is runtime state (lives in execute, never in planner
-# facts), so it's BT-legal. It does NOT survive a restart mid-batch (the
-# count resets); fine here because a batch is run start-to-finish and
-# sorted discs are terminal — every one is DELETED right after place().
+# ── Where a disc lands — the LANES ───────────────────────────────────
+# A lane is an ORDERED list of (holder alias, slot) positions, filled in
+# that order, MAX_PER_SLOT discs each (z stepping by Z_STEP), one lane per
+# verdict. The fail holder is split: A1–A5 take the discs whose READING
+# was outside the window, A6–A7 the discs a CAMERA failed (or saw no
+# disc), so the two kinds never mix in one stack. Which lane a disc takes
+# is decided in Sort / Reject; _drop only walks it.
+PASS_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
+FAIL_HOLDER  = "disc_out_bad_1"
+LANES = {
+    "pass":         [(h, s) for h in PASS_HOLDERS for s in SLOTS],
+    "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[0:5]],     # A1..A5
+    "fail_visual":  [(FAIL_HOLDER, s) for s in SLOTS[5:7]],     # A6, A7
+}
 
-def _next_drop(filled, holders):
-    """Next (holder_alias, slot, z, count) from the per-holder fill counts.
-    Fills slot A1→A7, stacking z by Z_STEP up to MAX_PER_SLOT, holder by
-    holder. Returns None when every holder is full."""
-    cap = len(SLOTS) * MAX_PER_SLOT
-    for holder in holders:
-        count = filled.get(holder, 0)
-        if count < cap:
-            slot = SLOTS[count // MAX_PER_SLOT]
-            z = round((count % MAX_PER_SLOT) * Z_STEP, 3)
-            return holder, slot, z, count
+# Where the next disc goes is tracked by a per-POSITION fill count in
+# ctx.meta["filled"] = {(holder, slot): n_dropped}; z = n × Z_STEP. This
+# is runtime state (lives in execute, never in planner facts), so it's
+# BT-legal. It does NOT survive a restart mid-batch (the count resets);
+# fine here because a batch is run start-to-finish and sorted discs are
+# terminal — every one is DELETED right after place().
+
+def _next_drop(filled, lane):
+    """Next (holder, slot, z, count) along ``lane`` — the first position
+    with room, its stack height. None when the whole lane is full."""
+    for holder, slot in LANES[lane]:
+        count = filled.get((holder, slot), 0)
+        if count < MAX_PER_SLOT:
+            return holder, slot, round(count * Z_STEP, 3), count
     return None
 
 
@@ -364,10 +379,10 @@ def _in_left(loaded, picked):
 
 
 def _out_counts(filled):
-    """Per-position discs IN each OUT holder, from the same fill counter
-    Sort uses (_next_drop): slots fill A1→A7, MAX_PER_SLOT each."""
-    return {key: [max(0, min(MAX_PER_SLOT, filled.get(alias, 0) - i * MAX_PER_SLOT))
-                  for i in range(len(SLOTS))] for alias, key in OUT_KEYS}
+    """Per-position discs IN each OUT holder — the drop's own fill counts,
+    {(holder, slot): n}, laid out as the pendant draws them."""
+    return {key: [min(MAX_PER_SLOT, filled.get((alias, s), 0)) for s in SLOTS]
+            for alias, key in OUT_KEYS}
 
 
 def _out_states(filled):
@@ -586,12 +601,26 @@ class Create(Action):
 
 
 class Pick(Action):
-    """Suction-pick the disc off the IN stack."""
+    """Suction-pick the disc off the IN stack, shake it inside the holder,
+    lift out — four recipe calls, each with its own parameters below:
+
+        pick(slot, **PRM)             grab; exit=False leaves the robot at the grip
+        retract(dist=rim − VIBRATE_BELOW_RIM)   straight up, the disc still in the holder
+        vibrate(**VIBRATE_PRM)        the rail alone, back to the same joints
+        retract(dist=rim + padding)   straight out, the recipe's own exit height
+
+    The rim is the holder's own geometry (its top anchor over the slot,
+    70 mm on stack_holder_disc_in), read at run time — one source."""
     # soft_approach=True: stop at the gap above the stack, straight final
     # descent — matches the Sort side (smove travel blends otherwise).
-    PRM      = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True)
+    # exit=False: no exit leg — the vibrate and the lift out are their own calls.
+    PRM       = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, exit=False)
+    # The vibrate: the carriage 2 mm each way, twice, every arm joint held;
+    # the disc's bottom VIBRATE_BELOW_RIM mm under the rim when it happens.
+    VIBRATE_PRM = dict(primitive="rail", pattern=[2, -2], cnt=2, vaj=[100, 500, 2000])
+    VIBRATE_BELOW_RIM = 5
     params   = ["disc"]
-    duration = 10
+    duration = 13          # the pick, plus the vibrate inside the holder
     resource = "robot"
 
     def pre(self, disc):
@@ -608,7 +637,20 @@ class Pick(Action):
         rt.step(f"disc {disc + 1}: pick from in_{in_h}[{slot}]")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — picking from {_pos(in_h, slot)}", active=(in_h, slot))
-        rcp[f"disc_in_{in_h}"].pick(slot, **self.PRM)
+        site = rcp[f"disc_in_{in_h}"]
+        # The Rack recipe's component is the ADAPTER; pick/place resolve
+        # the stack holder sitting on it themselves. retract is a base
+        # verb, so the holder is named outright — the same one Create
+        # spawned the disc under.
+        holder = self.ctx.workspace.components[f"stack_holder_disc_in_{in_h}"]
+        body = holder.assembly["body"]
+        rim = float(body.anchors["top"][2]) - float(body.anchors[slot][2])   # slot anchor → rim
+        at = dict(anchor=slot, solid_name="body", component=holder)
+        site.pick(slot, **self.PRM)
+        site.retract(dist=rim - self.VIBRATE_BELOW_RIM, **at)
+        rt.step(f"disc {disc + 1}: vibrate, {self.VIBRATE_BELOW_RIM} mm under the rim")
+        site.vibrate(**self.VIBRATE_PRM)
+        site.retract(dist=rim + site.padding, **at)
         rt.count("disc.picked", n=1)
         # One more taken from that position: the pendant's in-stack state
         # (full → done) is computed from this, never from the plan.
@@ -711,7 +753,7 @@ class Reject(Action):
     def execute(self, disc):
         why = self.ctx.meta.get("verdict", {}).get(disc, "bottom camera")
         held = why != "bottom camera: no disc"
-        return "rejected" if _drop(self, disc, good=False, why=why, held=held) else False
+        return "rejected" if _drop(self, disc, "fail_visual", why, held=held) else False
 
 
 class PlaceAnode(Action):
@@ -914,11 +956,11 @@ class PickAnode(Action):
         return "off_anode"
 
 
-def _drop(action, disc, good, why, held=True) -> bool:
-    """Drop the held disc into the next ordered slot of the good or bad
-    holders (fill counter), then DELETE it — sorted discs are terminal and
-    never linger in the scene. Shared by Sort and Reject. False when every
-    holder of that kind is full (the action fails, the run pauses).
+def _drop(action, disc, lane, why, held=True) -> bool:
+    """Drop the held disc into the next position of ``lane`` (LANES —
+    pass / fail_measure / fail_visual), then DELETE it — sorted discs are
+    terminal and never linger in the scene. Shared by Sort and Reject.
+    False when the lane is full (the action fails, the run pauses).
 
     ``held=False`` — the bottom camera saw NOTHING in the gripper (the
     stack ran out before the operator's mark, or the suction missed). The
@@ -929,11 +971,12 @@ def _drop(action, disc, good, why, held=True) -> bool:
     air. Under-counting a disc the detector merely missed costs one
     0.254 mm press on a compliant place — the safe direction."""
     rt, rcp, ws = action.ctx.runtime, action.ctx.recipes, action.ctx.workspace
-    holders = Sort.GOOD_HOLDERS if good else Sort.BAD_HOLDERS
-    filled = action.ctx.meta.setdefault("filled", {})   # holder → n dropped
-    nxt = _next_drop(filled, holders)
+    good = lane == "pass"
+    filled = action.ctx.meta.setdefault("filled", {})   # (holder, slot) → n dropped
+    nxt = _next_drop(filled, lane)
     if nxt is None:
-        rt.step(f"disc {disc + 1}: all {'good' if good else 'bad'} holders FULL")
+        rt.step(f"disc {disc + 1}: the {lane} lane is FULL — "
+                + ", ".join(f"{h}[{s}]" for h, s in LANES[lane]))
         return False
     holder, slot, z, count = nxt
     rt.step(f"disc {disc + 1}: {'GOOD' if good else 'BAD'} ({why}) → {holder}[{slot}] z={z}")
@@ -952,7 +995,7 @@ def _drop(action, disc, good, why, held=True) -> bool:
         rt.record(_tag(disc), result="fail", out=f"{name_out} {slot} (empty hand)", reason=why)
         return True
 
-    filled[holder] = count + 1
+    filled[(holder, slot)] = count + 1
     # one more disc through the bench: the total, and which column it went to
     rt.count("disc.sorted", n=1, **{"good" if good else "bad": 1})
     key = "pass_n" if good else "fail_n"
@@ -966,12 +1009,10 @@ class Sort(Action):
     """Drop the disc off the anode into an OUT holder: a top-camera fail
     is bad outright; otherwise the measured capacitance decides."""
     # Good/bad capacitance window (Farads). Defaulted WIDE so everything
-    # currently lands in "good" — set the real spec later.
+    # currently lands in "good" — set the real spec later. Where a disc
+    # lands by verdict is LANES (module level, shared with Reject).
     C_MIN = 0.0
     C_MAX = 1.0e9
-    # Ordered OUT-holder fill sequences (recipe aliases, in fill order).
-    GOOD_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
-    BAD_HOLDERS  = ["disc_out_bad_1"]
     # The place into ANY out holder (good and bad — Sort and Reject both
     # drop through _drop):
     #   soft_approach=True  stop at the gap above the slot and take the
@@ -997,7 +1038,7 @@ class Sort(Action):
         rt = self.ctx.runtime
         verdict = self.ctx.meta.get("verdict", {}).get(disc)
         if verdict is not None:
-            good, why = False, verdict
+            lane, why = "fail_visual", verdict
         else:
             c = self.ctx.meta.get("disc_c", {}).get(disc)
             if c is None:
@@ -1007,8 +1048,9 @@ class Sort(Action):
                 # — fail loudly rather than silently binning a good disc.
                 rt.step(f"disc {disc + 1}: no capacitance recorded — cannot sort", level="error")
                 return False
-            good, why = self.C_MIN <= c <= self.C_MAX, f"C = {c:g}"
-        return "sorted" if _drop(self, disc, good, why) else False
+            inside = self.C_MIN <= c <= self.C_MAX
+            lane, why = ("pass" if inside else "fail_measure"), f"C = {c:g}"
+        return "sorted" if _drop(self, disc, lane, why) else False
 
 
 class Park(Action):
