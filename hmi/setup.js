@@ -47,6 +47,17 @@ import { kitCss, wellCss, esc } from "/orchestrator/hmi-kit/kit.js";
 export const SLOTS_N = 7;                                   // SLOTS: A1..A7
 export const SLOTS   = Array.from({ length: SLOTS_N }, (_, i) => `A${i + 1}`);
 export const IN_KEYS = ["in_1", "in_2"];                    // the kwargs, consumed in this order
+
+// Classifier sensitivity — the ``classifier`` kwarg. The pass/fail model
+// gives a probability that the disc is a pass; the run passes a disc only
+// if it clears the threshold. Mirrors CLS_MODES in actions.py, and says
+// the number so nobody has to guess which way "high" cuts.
+const CLS_MODES = [
+  { key: "high",   label: "High",   hint: "a pass needs 75 % — catches the most" },
+  { key: "medium", label: "Medium", hint: "a pass needs 50 % — the model's own call" },
+  { key: "low",    label: "Low",    hint: "a pass needs 25 % — lets more through" },
+  { key: "ignore", label: "Ignore", hint: "no classifier — the detector must see a disc; the reading sorts" },
+];
 // What a FULL position is written as: MAX_PER_SLOT in actions.py, the
 // discs in a full stack. Written to the run record, never shown here.
 export const FULL    = 255;
@@ -143,7 +154,7 @@ export const CSS = kitCss + wellCss({
 .hmi .legend i.out { background:var(--surface2); border-color:var(--border);
   border-style:solid; opacity:.7; }
 
-/* ── two steps in one screen ───────────────────────────────────────────
+/* ── three steps in one screen ───────────────────────────────────────────
    The stepper is a pill of arrow segments — where you are and what comes
    next, in two words — and the step's own Back / Next sit at the far
    right of the same row, well away from the modal's Set & Start.
@@ -185,6 +196,11 @@ export const CSS = kitCss + wellCss({
 /* Moving between the steps changes nothing — the stepper stays live frozen. */
 .hmi[data-frozen="1"] .stepper button, .hmi[data-frozen="1"] .stepnav button {
   pointer-events:auto; opacity:1; }
+
+/* the classifier's four choices — one row of the kit's .pos buttons, the
+   chosen one armed; the hint under it says what the choice means */
+.hmi .row.seg { gap:var(--space-2); flex-wrap:wrap; }
+.hmi .row.seg button.pos { font-family:inherit; min-width:5.5rem; }
 
 /* ── final checks — one row per check: the box, one sentence, nothing in
    red. An unticked check is caught by the browser's own required-field
@@ -237,8 +253,10 @@ function initial(api, key, fallback) {
 // setup screen edits and the Replan view reads (api.values = what Start
 // sent). The checks are bench confirmations: never restored, never saved.
 export function benchState(api) {
-  const st = { in: {}, step: "bench", checks: {} };
+  const st = { in: {}, step: "bench", checks: {}, classifier: "medium" };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
+  const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
+  if (CLS_MODES.some(m => m.key === c)) st.classifier = c;
   return st;
 }
 
@@ -344,10 +362,12 @@ function stepBar(st, V) {
   const NEXT = icon('<polyline points="9 18 15 12 9 6"/>');
   const BACK = icon('<polyline points="15 18 9 12 15 6"/>');
   // A step is complete when nothing on it blocks Start: the bench has a
-  // loaded stack; every final check is ticked.
+  // loaded stack; the classifier always has a choice (it defaults); every
+  // final check is ticked.
   const STEPS = [
-    { key: "bench", title: "Bench",        ok: !V.errs.length },
-    { key: "check", title: "Final checks", ok: checksOk(st) },
+    { key: "bench",      title: "Bench",        ok: !V.errs.length },
+    { key: "classifier", title: "Classifier",   ok: true },
+    { key: "check",      title: "Final checks", ok: checksOk(st) },
   ];
   const k = STEPS.findIndex(x => x.key === st.step);
   const stepper = STEPS.map(x => {
@@ -377,6 +397,20 @@ function checksHtml(st) {
 
 function bodyHtml(st) {
   const V = check(st);
+  if (st.step === "classifier") {
+    return stepBar(st, V) + `
+  <div class="stack">
+    <div class="card">
+      <h4>Classifier sensitivity — how sure the pass / fail model must be</h4>
+      <div class="inner">
+        <div class="row seg">${CLS_MODES.map(m =>
+          `<button type="button" class="pos${st.classifier === m.key ? " armed" : ""}" data-cls="${m.key}">${esc(m.label)}</button>`).join("")}
+        </div>
+        <div class="hint">${esc((CLS_MODES.find(m => m.key === st.classifier) || CLS_MODES[1]).hint)}</div>
+      </div>
+    </div>
+  </div>`;
+  }
   if (st.step === "check") {
     return stepBar(st, V) + `
   <div class="stack">
@@ -439,6 +473,13 @@ function render(wrap, st) {
       if (seg) seg.classList.toggle("done", checksOk(st));
     };
   });
+  wrap.querySelectorAll("[data-cls]").forEach(b => {
+    b.onclick = () => {
+      if (frozen()) return;
+      st.classifier = b.dataset.cls;
+      render(wrap, st);
+    };
+  });
   const allfull = q("#allfull");
   if (allfull) allfull.onclick = () => {
     if (frozen()) return;
@@ -496,6 +537,7 @@ export default {
     return {
       in_1: _st.in.in_1.map(f => (f ? FULL : 0)),
       in_2: _st.in.in_2.map(f => (f ? FULL : 0)),
+      classifier: _st.classifier,
     };
   },
 
