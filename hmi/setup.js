@@ -32,7 +32,7 @@
 //
 // A position is either FULL or EMPTY — the operator loads whole stacks and
 // never types or sees a count. The kwargs are the in_1 / in_2 lists of
-// seven that setup() in actions.py reads: FULL (= MAX_PER_SLOT, the disc
+// seven that setup() in actions.py reads: FULL (= stack_size, the disc
 // count of a full stack) for a full position, 0 for an empty one.
 //
 // Step 2 — Final checks. The things the robot cannot verify and a run
@@ -52,15 +52,17 @@ export const IN_KEYS = ["in_1", "in_2"];                    // the kwargs, consu
 // gives a probability that the disc is a pass; the run passes a disc only
 // if it clears the threshold. Mirrors CLS_MODES in actions.py, and says
 // the number so nobody has to guess which way "high" cuts.
+// Left to right, least to most strict — the way a dial reads.
 const CLS_MODES = [
-  { key: "high",   label: "High",   hint: "a pass needs 75 % — catches the most" },
-  { key: "medium", label: "Medium", hint: "a pass needs 50 % — the model's own call" },
-  { key: "low",    label: "Low",    hint: "a pass needs 25 % — lets more through" },
   { key: "ignore", label: "Ignore", hint: "no classifier — the detector must see a disc; the reading sorts" },
+  { key: "low",    label: "Low",    hint: "a pass needs 25 % — lets more through" },
+  { key: "medium", label: "Medium", hint: "a pass needs 50 % — the model's own call" },
+  { key: "high",   label: "High",   hint: "a pass needs 75 % — catches the most" },
 ];
-// What a FULL position is written as: MAX_PER_SLOT in actions.py, the
-// discs in a full stack. Written to the run record, never shown here.
-export const FULL    = 255;
+// What a FULL position is written as: the stack size — ``stack_size`` in
+// hmi/default.j2, THE one place that number lives (actions.py reads the
+// same key into MAX_PER_SLOT). Read from the schema into st.full at
+// mount; written to the run record and shown as the well's pill.
 
 // The holders, TOP TO BOTTOM as drawn. `in` rows take clicks; the rest
 // are placeholders the robot fills during the run.
@@ -127,7 +129,7 @@ export const CSS = kitCss + wellCss({
    surface, muted text, nothing to click */
 .hmi .rack.disc .well.out { background:var(--surface2); border-style:solid;
   border-color:var(--border); color:var(--muted); opacity:.7; cursor:default; }
-/* the disc count as a small pill: a full stack's 255 here, the discs on
+/* the disc count as a small pill: a full stack's size here, the discs on
    offer in the Replan view */
 .hmi .rack.disc .well .n { position:absolute; top:-6px; right:-6px; min-width:20px; height:20px;
   padding:0 6px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center;
@@ -253,7 +255,8 @@ function initial(api, key, fallback) {
 // setup screen edits and the Replan view reads (api.values = what Start
 // sent). The checks are bench confirmations: never restored, never saved.
 export function benchState(api) {
-  const st = { in: {}, step: "bench", checks: {}, classifier: "medium" };
+  const st = { in: {}, step: "bench", checks: {}, classifier: "medium",
+               full: Number(initial(api, "stack_size", 0)) || 0 };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
   const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
   if (CLS_MODES.some(m => m.key === c)) st.classifier = c;
@@ -261,7 +264,7 @@ export function benchState(api) {
 }
 
 // Where a disc index lives — the same numbering as setup() in actions.py:
-// holder 1 then 2, position A1..A7, a FULL position holding FULL discs,
+// holder 1 then 2, position A1..A7, a FULL position holding st.full discs,
 // top of the stack first. {holder, slot, depth} or null for an index
 // past the inventory.
 export function discPlace(st, disc) {
@@ -269,7 +272,7 @@ export function discPlace(st, disc) {
   for (const key of IN_KEYS) {                 // consumption order: in_1 then in_2 — NOT the drawing order
     const holder = Number(key.slice(-1));
     for (let s = 0; s < SLOTS_N; s++) {
-      const n = st.in[key][s] ? FULL : 0;
+      const n = st.in[key][s] ? st.full : 0;
       if (i < n) return { holder, key, slot: SLOTS[s], index: s, depth: n - 1 - i };
       i -= n;
     }
@@ -315,7 +318,7 @@ function msgHtml(V) {
 // groups. Every IN position is a toggle carrying its holder key and
 // index (data-h / data-i); OUT positions carry nothing.
 //
-// Every full position carries its disc count as a pill (FULL, 255).
+// Every full position carries its disc count as a pill (st.full).
 // opts.counts — {in_1: [7 numbers], in_2: [...]}: the Replan view's
 // discs on offer per position; the pill shows that count instead, a
 // position with discs on offer is a choice (.pos, data-h / data-i) and
@@ -334,7 +337,7 @@ export function benchHtml(st, opts = {}) {
     for (let i = 0; i < SLOTS_N; i++) {
       const s = SLOTS[i];
       const full = hd.in && !!st.in[hd.key][i];     // OUT rows have no flags
-      const n = counts ? ((counts[hd.key] && counts[hd.key][i]) || 0) : (full ? FULL : 0);
+      const n = counts ? ((counts[hd.key] && counts[hd.key][i]) || 0) : (full ? st.full : 0);
       const pill = n ? `<span class="n">${n}</span>` : "";
       const pos = `${hd.key}:${i}`;
       const cls = counts ? (n ? " pos" : "") + (crossed.has(pos) ? " skip" : "") : " toggle";
@@ -406,7 +409,7 @@ function bodyHtml(st) {
         <div class="row seg">${CLS_MODES.map(m =>
           `<button type="button" class="pos${st.classifier === m.key ? " armed" : ""}" data-cls="${m.key}">${esc(m.label)}</button>`).join("")}
         </div>
-        <div class="hint">${esc((CLS_MODES.find(m => m.key === st.classifier) || CLS_MODES[1]).hint)}</div>
+        <div class="hint">${esc((CLS_MODES.find(m => m.key === st.classifier) || CLS_MODES.find(m => m.key === "medium")).hint)}</div>
       </div>
     </div>
   </div>`;
@@ -533,10 +536,10 @@ export default {
   value() {
     if (!_st) return {};
     // The kwargs setup() in actions.py reads — seven entries per IN
-    // holder, index i = A(i+1): FULL (the stack's disc count) or 0.
+    // holder, index i = A(i+1): the stack size (st.full) or 0.
     return {
-      in_1: _st.in.in_1.map(f => (f ? FULL : 0)),
-      in_2: _st.in.in_2.map(f => (f ? FULL : 0)),
+      in_1: _st.in.in_1.map(f => (f ? _st.full : 0)),
+      in_2: _st.in.in_2.map(f => (f ? _st.full : 0)),
       classifier: _st.classifier,
     };
   },

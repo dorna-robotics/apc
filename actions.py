@@ -2,9 +2,10 @@
 
 IN inventory comes from hmi/default.j2 through the setup screen: two lists
 of 7 (``in_1``, ``in_2``), index i = anchor A<i+1> of that holder, 0 for an
-empty position and any positive value (the screen writes MAX_PER_SLOT) for
-a FULL stack of MAX_PER_SLOT discs. The operator only ever says full or
-empty; the count is this file's.
+empty position and any positive value (the screen writes the stack size)
+for a FULL stack. The operator only ever says full or empty; the count is
+``stack_size`` in hmi/default.j2 — the one place it is written — read
+here into MAX_PER_SLOT by setup().
 Discs are consumed TOP-of-stack first, A1→A7, in_1 until empty, then
 in_2. Each disc appears in the scene the moment it's about to be picked
 (create-on-demand, one at a time via feed_free) at its stack position
@@ -85,6 +86,8 @@ together.
 
 from __future__ import annotations
 
+import os
+
 from workspace.bt import Action, predicate
 
 
@@ -132,7 +135,22 @@ anode_free  = predicate("anode_free", capacity=True)    # anode/cathode station 
 # ── Exposed, tweakable parameters ─────────────────────────────────────
 SLOTS       = [f"A{c}" for c in range(1, 7 + 1)]  # A1 .. A7, in order
 Z_STEP      = 0.254                            # per-disc stack lift (mm), in + out
-MAX_PER_SLOT = 255                             # discs per slot before next slot
+# Discs per position — a full IN stack, and an OUT position before the
+# next one. NOT written here: ``stack_size`` in hmi/default.j2 is the one
+# place, read by setup() (kwarg; the schema's own default when a caller
+# passes none — a notebook, a bare setup()).
+MAX_PER_SLOT = 0
+_SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hmi", "default.j2")
+
+
+def _schema_default(key):
+    """A kwarg's default straight from hmi/default.j2 — what the platform
+    passes when nothing overrides it; here for callers that skip the
+    platform (a notebook calling setup() bare)."""
+    import yaml
+    from jinja2 import Template
+    with open(_SCHEMA) as f:
+        return yaml.safe_load(Template(f.read()).render())[key]
 
 # Visual inspection: the detector runs on the WHOLE frame (no ROI — it
 # finds the disc itself); the classifier then sees the detector's box
@@ -391,6 +409,10 @@ def _publish(action, headline=None, active=None, **extra):
 # ── setup ─────────────────────────────────────────────────────────────
 
 def setup(**kwargs):
+    # The stack size first — every count below is in units of it.
+    global MAX_PER_SLOT
+    MAX_PER_SLOT = int(kwargs.get("stack_size") or _schema_default("stack_size"))
+
     def _counts(key, default):
         """Parse an inventory spec into exactly len(SLOTS) disc counts —
         lenient by design, since a headless caller may deliver the list

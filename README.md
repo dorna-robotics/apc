@@ -94,8 +94,9 @@ cd ~/Downloads/projects/apc && sudo python3 main.py           # UI at :5010
 cd ~/Downloads/workspace/workspace && sudo python3 -m workspace.bt.replay ~/Downloads/projects/apc --batch 1 --kw in_1=1,0,0,0,0,0,0
 ```
 
-A full IN position is `MAX_PER_SLOT` discs (255), so the replay above
-plans one stack. The audit row per disc (`rt.record`) is seeded by
+A full IN position is `stack_size` discs — the one number in
+`hmi/default.j2`, read by `setup()` and by the setup screen alike — so
+the replay above plans one stack. The audit row per disc (`rt.record`) is seeded by
 `Create`, filled by `Measure` and `Sort`, and closed with `status` at
 `Park`; the platform caps records at 10 000 items per run.
 

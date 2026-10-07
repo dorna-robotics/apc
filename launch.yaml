@@ -1,7 +1,8 @@
 # apc — launch config.
 #
 # IN inventory: in_1 / in_2 are lists of 7 — index i is the number of
-# discs stacked at anchor A(i+1) of that holder (0..255 each). Total
+# discs stacked at anchor A(i+1) of that holder (0, or stack_size — the
+# one number in hmi/default.j2). Total
 # discs = sum of both lists. Stacks are consumed top-first, A1→A7, in_1
 # until empty, then in_2.
 #
@@ -9,7 +10,7 @@
 # anode → cathode down → read C → cathode up → pick → sort to out good/bad
 # by the capacitance window (C_MIN..C_MAX in actions.py). Ordered drop:
 # good fills out_good_1 then _2, bad fills out_bad_1; slots A1→A7, z steps
-# by Z_STEP per disc, max MAX_PER_SLOT per slot. Every sorted disc is
+# by Z_STEP per disc, max stack_size per slot. Every sorted disc is
 # deleted right after it's placed; Start sweeps leftovers from killed runs.
 
 project_name: apc
