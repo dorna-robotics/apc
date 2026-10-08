@@ -685,8 +685,9 @@ class ClearAnode(Action):
     duration = 8
     resource = "robot"
     # The blow, three legs like a place. The ``blow`` anchor IS the blow
-    # pose (5 mm above place's height, 15 mm along -x, tilted -20° about
-    # x — the component's anchors). A PLANNED, collision-checked travel
+    # pose (5 mm above place's height, 15 mm along -x, the orientation
+    # taught on the bench — the component's anchors). A PLANNED,
+    # collision-checked travel
     # to ``hover``, 20 mm STRAIGHT UP from the anchor, clear of the
     # anode's box; then one jmove onto the anchor with no plan and no
     # collision check — the way a place's final descent is — the air,
@@ -694,8 +695,9 @@ class ClearAnode(Action):
     # outside the box.
     #
     # ``hover`` is an offset in the anchor's frame, and the anchor is
-    # tilted 20°, so straight up is (0, -sin 20°, cos 20°) × 20 — NOT
-    # [0, 0, 20], which is 20 mm back along the nozzle's axis. Straight
+    # tilted (23.6° off vertical), so straight up is R_anchorᵀ · [0, 0, 20]
+    # = the numbers below — NOT [0, 0, 20], which is 20 mm back along
+    # the nozzle's axis (dev/teach: scratch teach_blow2 prints it). Straight
     # up, the hover and the blow point solve in ONE wrist branch and the
     # unplanned jmove between them moves no joint more than 8° (sim);
     # the first version hovered along the nozzle axis and the jmove
@@ -705,7 +707,7 @@ class ClearAnode(Action):
     # comment names the one 5 mm that flips it). Change the tilt →
     # change this.
     BLOW      = dict(anchor="blow",
-                     hover=[0, -6.84, 18.79, 0, 0, 0],
+                     hover=[-2.15, -7.73, 18.32, 0, 0, 0],
                      at=[0, 0, 0, 0, 0, 0],
                      seconds=5.0)
     LEG_PRM   = dict(has_motion_plan=[False, "jmove"])   # the unplanned legs in and out

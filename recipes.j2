@@ -89,9 +89,15 @@ inspector_robot_cls:
 # cathode plunges; a held exit would leave the tool hovering over the
 # disc through the cathode cycle. (PickAnode re-enables fusing per call
 # for its exit -> sort travel.)
+# ref_joints: the pose TAUGHT for the blow (2026-10-08) — the wrist branch
+# every anode IK is solved nearest to. With the old reference the blow
+# point solved in the other branch from its hover and the unplanned jmove
+# onto it swung j3/j4/j5 by 71/41/71°; with this one it lands within 1.3°
+# of the taught joints and the jmove moves no joint more than 10° (sim).
+# The view, place, pick and check poses solve as before.
 anode:
   class: workspace.recipes.recipe.Recipe
-  kwargs: {component: anode_1, target_anchor: place, fuse: false, ref_joints: [-69.2, 13.6, -89.9, 0.0, -13.7, 110.8, 18.8, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  kwargs: {component: anode_1, target_anchor: place, fuse: false, ref_joints: [-56.4, 54.3, -111.7, -45.2, -16.5, 146.4, 17.6, 0.0], base_distance: 175, rail_step: 5, rail_span: 0, padding: 60, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Multimeter — read the disc's capacitance while it's clamped anode↔cathode.
 meter:

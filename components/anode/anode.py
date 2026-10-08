@@ -12,13 +12,18 @@ class Anode:
             "center": [0, 0, 0, 0, 0, 0],
             "place":  [0, 6.25, 106.24, 0, 0, 90],
             # blow — the air-blow pose: 5 mm above place's height, 15 mm
-            # along -x, place's orientation tilted -20° about the body's x
-            # axis (rotate_abc; = [-15.694, -15.694, 89.002]). The 5 mm is
-            # load-bearing: AT place height this point solves in the other
-            # wrist branch from its hover, and the unplanned jmove onto it
-            # swings j3/j4/j5 by 61/40/57° over the anode (sim); 5 mm up,
-            # under 8° (see ClearAnode.BLOW).
-            "blow":   [-15, 6.25, 111.24, *rotate_abc([0, 0, 90], axis=[1, 0, 0], angle=-20, local=True)],
+            # along -x; the orientation TAUGHT on the bench (2026-10-08):
+            # the robot was jogged to the pose that blows right, joints
+            # [-56.45, 54.25, -111.73, -45.20, -16.48, 146.40, rail 17.57],
+            # and the tool's orientation there, expressed in this body's
+            # frame and flipped onto the anchor (the tool's z is the
+            # anchor's -z: the recipe stands the tool INTO an anchor), is
+            # this abc. The jet is 23.6° off vertical toward the body's +x;
+            # the wrist is rolled ~18° from the old rotate_abc tilt. The
+            # 5 mm of height is load-bearing: at place height the blow point
+            # solved in the other wrist branch from its hover and the
+            # unplanned jmove onto it swung the wrist over the anode.
+            "blow":   [-15, 6.25, 111.24, -21.452, -17.334, 107.249],
             "top":    [0, 6.25, 106.24, 0, 0, 0],
             "hole_0":  [ 75,  37.5, 0, 0, 0, 0],
             "hole_1":  [-75,  37.5, 0, 0, 0, 0],
