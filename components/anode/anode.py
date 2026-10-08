@@ -11,7 +11,7 @@ class Anode:
         anchors={"body": {
             "center": [0, 0, 0, 0, 0, 0],
             "place":  [0, 6.25, 106.24, 0, 0, 90],
-            # blow — the air-blow pose: 5 mm above place's height, 15 mm
+            # blow — the air-blow pose: 2 mm above place's height, 13 mm
             # along -x; the orientation TAUGHT on the bench (2026-10-08):
             # the robot was jogged to the pose that blows right, joints
             # [-56.45, 54.25, -111.73, -45.20, -16.48, 146.40, rail 17.57],
@@ -20,10 +20,12 @@ class Anode:
             # anchor's -z: the recipe stands the tool INTO an anchor), is
             # this abc. The jet is 23.6° off vertical toward the body's +x;
             # the wrist is rolled ~18° from the old rotate_abc tilt. The
-            # 5 mm of height is load-bearing: at place height the blow point
+            # height is load-bearing: AT place height the blow point once
             # solved in the other wrist branch from its hover and the
-            # unplanned jmove onto it swung the wrist over the anode.
-            "blow":   [-15, 6.25, 111.24, -21.452, -17.334, 107.249],
+            # unplanned jmove onto it swung the wrist over the anode — the
+            # anode recipe's ref_joints (recipes.j2) now pin the branch;
+            # re-check the jmove's deltas in sim after moving this.
+            "blow":   [-13, 6.25, 108.24, -21.452, -17.334, 107.249],
             "top":    [0, 6.25, 106.24, 0, 0, 0],
             "hole_0":  [ 75,  37.5, 0, 0, 0, 0],
             "hole_1":  [-75,  37.5, 0, 0, 0, 0],
