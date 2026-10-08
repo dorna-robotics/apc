@@ -32,6 +32,12 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                               the suction is never released mid-way, the
                               hand goes to the fail column as if it held
                               one.
+                    TWO empty picks IN A ROW from one IN position — seen
+                    by either camera — mean that stack has run out: its
+                    remaining discs are VOID (done, never created) and
+                    the run moves to the next position. One empty is a
+                    fail, not a verdict on the stack (a detector can
+                    miss a real disc). EMPTY_RUN_ENDS_COLUMN.
    5. Reject        (fail only) drop the held disc into the fail column.
    6. PlaceAnode    place the disc on the anode's "place" anchor, stand
                     where the robot camera sees it.
@@ -44,13 +50,27 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
    9. Measure       read the multimeter capacitance → record it for the disc.
   10. CathodeUp     retract the cylinder (cathode up).
   11. PickAnode     suction-pick the disc back off the anode.
-  12. Sort          drop it into an OUT holder by its LANE (LANES): a
-                    camera fail → the fail holder's A6–A7; a reading
-                    outside C_MIN..C_MAX → the fail holder's A1–A5; a pass
-                    → the pass holders, out_good_1 then _2. Ordered fill.
+  12. CheckAnode    robot camera on the anode again: the detector alone.
+                    clear → the hand has the disc; occupied → a disc is
+                    still on the anode, so whatever the hand holds is
+                    a STUCK fail and the anode must be cleared before the
+                    next placement.
+  13. Sort          drop it into an OUT holder by its LANE (LANES): a
+                    camera fail → the fail holder's A6–A7; stuck → A5; a
+                    reading outside C_MIN..C_MAX → A1–A4; a pass → the
+                    pass holders, out_good_1 then _2. Ordered fill.
 
-Then Park once every disc is DONE — sorted or rejected. ``done`` is the
-closure fact every way out asserts. ``ROUTE`` at the bottom of this
+And ONE run-level action, ClearAnode, planned wherever the anode is not
+known clear — right after Start, and after any CheckAnode that saw a
+disc left behind: image the anode; nothing there → ``anode_clear``;
+something there → go to the anode's ``blow`` anchor, blow, and return
+with no fact changed, so the planner selects it again — one action run
+per attempt, no loop. After MAX_BLOWS attempts in a row it pauses for
+the operator to clear the anode and Resume. PlaceAnode needs
+``anode_clear`` and takes it away.
+
+Then Park once every disc is DONE — sorted, rejected or void. ``done`` is
+the closure fact every way out asserts. ``ROUTE`` at the bottom of this
 file is that order, and being listed there is what makes an action part
 of the run (bt-framework-guide §13). A FLAT project: discs are strictly
 serial through the bench (feed / hand / anode each hold one) and a sorted
@@ -67,7 +87,8 @@ from the facts at Park. The run's ``records/<start>/records.csv``
 The DROP is ORDERED by a fill counter (ctx.meta["filled"]) along a LANE —
 an ordered list of (holder, slot) positions, one lane per verdict (LANES):
   * pass          out_good_1 A1→A7, then out_good_2 A1→A7
-  * fail_measure  out_bad_1 A1→A5 — the reading outside the window
+  * fail_measure  out_bad_1 A1→A4 — the reading outside the window
+  * fail_stuck    out_bad_1 A5    — the anode still showed a disc after the pick
   * fail_visual   out_bad_1 A6→A7 — a camera said fail, or saw no disc
   * within a position: z starts at 0 and steps by Z_STEP per disc, up to
     MAX_PER_SLOT discs, then the lane's next position.
@@ -112,8 +133,11 @@ cathode_down = predicate("cathode_down") # cylinder driven down (cathode contact
 measured     = predicate("measured")     # capacitance read for this disc
 cathode_up   = predicate("cathode_up")   # cylinder retracted
 off_anode    = predicate("off_anode")    # disc re-gripped off the anode
+anode_checked = predicate("anode_checked")  # the anode was imaged after this disc's pick
+anode_stuck  = predicate("anode_stuck")  # …and a disc was still on it: the hand's disc is a STUCK fail
 sorted_      = predicate("sorted")       # disc dropped into an out holder
-done         = predicate("done")         # THE closure fact — sorted, good or bad
+void         = predicate("void")         # never existed: its IN position ran out before its turn
+done         = predicate("done")         # THE closure fact — sorted, good, bad or void
 parked       = predicate("parked")
 
 # ── Single-occupancy resources (capacity-1, no args) ──────────────────
@@ -123,8 +147,11 @@ parked       = predicate("parked")
 # while the cathode is down. Each fact is consumed (-fact) when its slot
 # fills and restored (+fact) when it empties, forcing strictly
 # one-disc-at-a-time:
-#   feed_free  — only one un-picked disc may exist (create → pick → create
-#                → pick…, never a batch of Creates ahead of the picks).
+#   feed_free  — one disc at a time between its Create and the cameras'
+#                verdict on it. Restored by the inspections, NOT by Pick:
+#                the next Create waits until the cameras have settled
+#                what the pick took, so a position found empty can void
+#                its remaining discs before any of them is spawned.
 #   hand_empty — the gripper holds one disc.
 #   anode_free — the anode/cathode station processes one disc.
 # See project-guide §8 "Single-occupancy resources".
@@ -137,6 +164,10 @@ parked       = predicate("parked")
 feed_free   = predicate("feed_free", capacity=True)     # in-feed has no un-picked disc
 hand_empty  = predicate("hand_empty", capacity=True)    # gripper holds no disc
 anode_free  = predicate("anode_free", capacity=True)    # anode/cathode station is idle
+# The anode has been SEEN empty (ClearAnode / CheckAnode) — PlaceAnode
+# needs it and takes it away. Not a capacity fact: it is knowledge, set
+# by a camera and consumed by a placement.
+anode_clear = predicate("anode_clear")
 
 
 # ── Exposed, tweakable parameters ─────────────────────────────────────
@@ -173,28 +204,40 @@ CLS_ROI_OFFSET     = 100
 # the reading alone. setup() writes CLS_MODE from the kwarg.
 CLS_MODES          = {"high": 0.75, "medium": 0.50, "low": 0.25, "ignore": None}
 CLS_MODE           = "medium"
+# How many "no disc" verdicts IN A ROW from one IN position — by either
+# camera — end that position: its remaining discs are voided and the run
+# moves on. One is a fail, not a verdict on the stack.
+EMPTY_RUN_ENDS_COLUMN = 2
 
 # Suction motion offsets (mirror the runtime example).
 PICK_TCP_Z   = -5                             # suction drives deeper to grab
 PLACE_GRAV   = -5                              # suction presses on release
 
-_STEPS = 12                                    # per-disc steps for progress (nominal)
+_STEPS = 13                                    # per-disc steps for progress (nominal)
 
 
 # ── Where a disc lands — the LANES ───────────────────────────────────
 # A lane is an ORDERED list of (holder alias, slot) positions, filled in
 # that order, MAX_PER_SLOT discs each (z stepping by Z_STEP), one lane per
-# verdict. The fail holder is split: A1–A5 take the discs whose READING
-# was outside the window, A6–A7 the discs a CAMERA failed (or saw no
-# disc), so the two kinds never mix in one stack. Which lane a disc takes
-# is decided in Sort / Reject; _drop only walks it.
+# verdict. The fail holder is split: A1–A4 take the discs whose READING
+# was outside the window, A5 the discs the hand held while the anode
+# still showed one (STUCK — what the hand holds is not trusted), A6–A7
+# the discs a CAMERA failed (or saw no disc), so the kinds never mix in
+# one stack. Which lane a disc takes is decided in Sort / Reject; _drop
+# only walks it.
 PASS_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
 FAIL_HOLDER  = "disc_out_bad_1"
 LANES = {
     "pass":         [(h, s) for h in PASS_HOLDERS for s in SLOTS],
-    "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[0:5]],     # A1..A5
+    "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[0:4]],     # A1..A4
+    "fail_stuck":   [(FAIL_HOLDER, s) for s in SLOTS[4:5]],     # A5
     "fail_visual":  [(FAIL_HOLDER, s) for s in SLOTS[5:7]],     # A6, A7
 }
+
+# Where the robot camera looks at the anode from — the stand PlaceAnode
+# ends on and ClearAnode / CheckAnode go to: an offset in the place
+# anchor's frame that keeps the lens off the disc.
+ANODE_VIEW = dict(anchor="place", offset=[10, 50, 70, 0, 0, 0])
 
 # Where the next disc goes is tracked by a per-POSITION fill count in
 # ctx.meta["filled"] = {(holder, slot): n_dropped}; z = n × Z_STEP. This
@@ -234,6 +277,46 @@ def _pass_prob(res) -> float:
     return p if top.get("cls") == "pass" else 1.0 - p
 
 
+def _column_mates(disc: int) -> list:
+    """The discs still to come from the same IN position as ``disc`` —
+    what an ended position voids. Contiguous by construction (INVENTORY is
+    built position by position, top of the stack first)."""
+    col = INVENTORY[disc][:2]
+    return [d for d in range(disc + 1, len(INVENTORY)) if INVENTORY[d][:2] == col]
+
+
+def _empty_run(action, disc, seen: bool) -> bool:
+    """Count a camera's verdict against the disc's IN position: a disc seen
+    resets the position's run of empties, a "no disc" extends it. True
+    when the run has reached EMPTY_RUN_ENDS_COLUMN — the position is
+    finished. Runtime state (ctx.meta), like the fill counter."""
+    col = INVENTORY[disc][:2]
+    runs = action.ctx.meta.setdefault("empty_run", {})
+    if seen:
+        runs[col] = 0
+        return False
+    runs[col] = runs.get(col, 0) + 1
+    return runs[col] >= EMPTY_RUN_ENDS_COLUMN
+
+
+def _end_column(action, disc) -> None:
+    """The run-time side of a position ending: say so, drop the scene
+    disc its Create may already have spawned there, mark the position
+    emptied for the pendant. The FACTS (done + void on the mates) are the
+    action's ``column_done`` branch."""
+    rt, ws = action.ctx.runtime, action.ctx.workspace
+    in_h, slot, _z = INVENTORY[disc]
+    mates = _column_mates(disc)
+    rt.step(f"in_{in_h}[{slot}]: {EMPTY_RUN_ENDS_COLUMN} empty picks in a row — the stack has run out, "
+            f"{len(mates)} more disc{'s' if len(mates) != 1 else ''} there voided")
+    for d in mates:
+        if _disc(d) in ws.components:
+            ws.remove_component(_disc(d))
+    action.ctx.meta.setdefault("void", set()).add((in_h, slot))
+    action.ctx.meta["empty_run"][(in_h, slot)] = 0
+    _publish(action, f"{_pos(in_h, slot)} is empty — moving on")
+
+
 def _verdict(res) -> str:
     """The classifier's word under the run's sensitivity: ``pass`` only
     when its pass probability clears CLS_MODES[CLS_MODE]. An empty result
@@ -242,6 +325,17 @@ def _verdict(res) -> str:
     if threshold is None:
         return "pass"            # ignore: the classifier has no say
     return "pass" if _pass_prob(res) >= threshold else "fail"
+
+
+def _anode_seen(action):
+    """Stand the robot camera over the anode (ANODE_VIEW) and run the
+    DETECTOR alone. Returns the detector's hits (``[]`` = nothing on the
+    anode), or ``None`` when the read failed (the declarative-retry
+    contract: the caller returns False, the operator recovers). In sim
+    the anode is empty — ``sim_return=[]`` — so a sim run never blows."""
+    rcp = action.ctx.recipes
+    rcp["anode"].stand(ANODE_VIEW["anchor"], offset=ANODE_VIEW["offset"])
+    return rcp["inspector_robot"].detect(roi={"corners": [], "crop": False}, sim_return=[])
 
 
 def _inspect(action, od_alias, cls_alias):
@@ -328,7 +422,7 @@ def _progress_pct(action):
 # The per-disc chain in order — what progress and the audit status read.
 _CHAIN = (created, picked, presented, inspected, bottom_failed, on_anode,
           anode_inspected, top_failed, cathode_down, measured, cathode_up,
-          off_anode, sorted_)
+          off_anode, anode_checked, sorted_, void)
 
 
 def _status_of(facts, disc):
@@ -346,14 +440,15 @@ OUT_KEYS = (("disc_out_good_1", "good_1"), ("disc_out_good_2", "good_2"),
             ("disc_out_bad_1", "bad_1"))
 
 
-def _in_states(loaded, picked, active=None):
+def _in_states(loaded, picked, active=None, void=()):
     """Per-position state of the two IN holders.
       empty   nothing was loaded there
       full    loaded, discs remain
       active  the disc being picked right now comes from here
-      done    loaded, and every disc has been taken
+      done    loaded, and every disc has been taken — or the cameras found
+              the stack empty early (``void``: the position is finished)
     ``loaded`` / ``picked`` map (holder, slot) → n; ``active`` is one
-    (holder, slot) or None."""
+    (holder, slot) or None; ``void`` a set of (holder, slot)."""
     out = {}
     for h in (1, 2):
         row = []
@@ -363,7 +458,7 @@ def _in_states(loaded, picked, active=None):
                 row.append("active")
             elif n <= 0:
                 row.append("empty")
-            elif p >= n:
+            elif p >= n or (h, slot) in void:
                 row.append("done")
             else:
                 row.append("full")
@@ -405,7 +500,8 @@ def _publish(action, headline=None, active=None, **extra):
     per key (Runtime.op); observability never blocks the workflow."""
     meta = action.ctx.meta
     vals = dict(
-        in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active),
+        in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active,
+                             meta.get("void", set())),
         in_left=_in_left(LOADED, meta.get("picked_from", {})),
         out_stacks=_out_states(meta.get("filled", {})),
         out_counts=_out_counts(meta.get("filled", {})),
@@ -424,9 +520,15 @@ def _publish(action, headline=None, active=None, **extra):
 # ── setup ─────────────────────────────────────────────────────────────
 
 def setup(**kwargs):
-    # The stack size first — every count below is in units of it.
+    # The bench's numbers first — the kwarg when the platform passes it,
+    # the schema's own default when a caller skips the platform (a bare
+    # setup() from a notebook). hmi/default.j2 is the one place.
+    def _num(key, cast):
+        v = kwargs.get(key)
+        return cast(v if v not in (None, "") else _schema_default(key))
+
     global MAX_PER_SLOT
-    MAX_PER_SLOT = int(kwargs.get("stack_size") or _schema_default("stack_size"))
+    MAX_PER_SLOT = _num("stack_size", int)             # every count below is in units of it
 
     def _counts(key, default):
         """Parse an inventory spec into exactly len(SLOTS) disc counts —
@@ -525,6 +627,9 @@ class Start(Action):
         # the key).
         for k in ("picked_from", "filled", "disc_c", "verdict"):
             self.ctx.meta[k] = {}
+        self.ctx.meta["blow_tries"] = 0
+        self.ctx.meta["empty_run"] = {}
+        self.ctx.meta["void"] = set()
         self.ctx.meta["pass_n"] = 0
         self.ctx.meta["fail_n"] = 0
         _publish(self, "Starting — homing", last_disc=None, last_c=None,
@@ -559,6 +664,74 @@ class Start(Action):
         return "started"
 
 
+class ClearAnode(Action):
+    """Run-level: make sure the anode is EMPTY before anything is placed
+    on it — at run start, and after a CheckAnode that saw a disc left
+    behind. Image it; nothing there → ``clear``. A disc there → go to
+    the anode's ``blow`` anchor, blow it off, and return ``blown`` with
+    NO fact changed: the planner selects this action again, one run per
+    attempt, no loop. After MAX_BLOWS attempts in a row the run pauses
+    for the operator to clear the anode; Resume runs it again from zero.
+
+    ``hand_empty`` in the pre: never while a disc is in the gripper — the
+    blow-off is the suction's own release, it would drop that disc."""
+    params   = []
+    duration = 8
+    resource = "robot"
+    # The blow, three legs like a place. The ``blow`` anchor IS the blow
+    # pose (place's height, 10 mm along -x, tilted -30° about x — the
+    # component's anchors). A PLANNED, collision-checked travel to
+    # ``hover``, 20 mm back along the anchor's z (the nozzle's axis —
+    # the anchor is tilted, so this is along the tilt, not world height),
+    # clear of the anode's box; then one jmove onto the anchor with no
+    # plan and no collision check — the way a place's final descent is
+    # — the air, and the same jmove back out, so the next planned travel
+    # starts outside the box.
+    BLOW      = dict(anchor="blow",
+                     hover=[0, 0, 20, 0, 0, 0],
+                     at=[0, 0, 0, 0, 0, 0],
+                     seconds=5.0)
+    LEG_PRM   = dict(has_motion_plan=[False, "jmove"])   # the unplanned legs in and out
+    MAX_BLOWS = 5                     # blows in a row before the operator is asked
+
+    def pre(self):
+        return started() & hand_empty() & ~anode_clear()
+
+    def eff(self):
+        return {"clear": (+anode_clear(),),
+                "blown": None}        # no fact: the planner asks this action again
+
+    def execute(self):
+        rt, rcp, ws = self.ctx.runtime, self.ctx.recipes, self.ctx.workspace
+        rt.step("anode: looking for a disc")
+        found = _anode_seen(self)
+        if found is None:
+            rt.step("anode: camera read failed — recover the camera, then Resume")
+            return False
+        if not found:
+            self.ctx.meta["blow_tries"] = 0
+            rt.step("anode: clear")
+            return "clear"
+        tries = self.ctx.meta.get("blow_tries", 0)
+        if tries >= self.MAX_BLOWS:
+            self.ctx.meta["blow_tries"] = 0
+            rt.step(f"anode: still holds a disc after {tries} blows — clear the anode by hand, "
+                    f"then Resume", level="warning")
+            _publish(self, "Anode blocked — clear it, then Resume")
+            rt.pause()
+            rt.checkpoint()           # blocks until Resume; then this action runs again
+            return False
+        self.ctx.meta["blow_tries"] = tries + 1
+        rt.step(f"anode: a disc is there — blow {tries + 1} of {self.MAX_BLOWS}")
+        _publish(self, f"Clearing the anode — blow {tries + 1} of {self.MAX_BLOWS}")
+        anchor = self.BLOW["anchor"]
+        rcp["anode"].stand(anchor, offset=self.BLOW["hover"])                     # planned, outside the box
+        rcp["anode"].stand(anchor, offset=self.BLOW["at"], **self.LEG_PRM)        # jmove onto the anchor, no plan
+        ws.components["gripper_suction_1"].blow(self.BLOW["seconds"])
+        rcp["anode"].stand(anchor, offset=self.BLOW["hover"], **self.LEG_PRM)     # jmove back out
+        return "blown"
+
+
 class Create(Action):
     """Spawn the disc at its configured inventory position — the top of
     the remaining stack at its in-holder anchor (z = depth × Z_STEP)."""
@@ -568,7 +741,8 @@ class Create(Action):
 
     def pre(self, disc):
         # feed_free gates one un-picked disc at a time (no batch of Creates).
-        return started() & feed_free() & ~created(disc)
+        # ~done skips a disc its position's empty picks already voided.
+        return started() & feed_free() & ~created(disc) & ~done(disc)
 
     def eff(self, disc):
         return {"created": (+created(disc), -feed_free())}   # feed now occupied
@@ -629,7 +803,9 @@ class Pick(Action):
 
     def eff(self, disc):
         # Disc leaves the feed into the hand: feed frees, hand fills.
-        return {"picked": (+picked(disc), +feed_free(), -hand_empty())}
+        # Disc into the hand: hand fills. The feed stays busy until the
+        # cameras have seen what the pick took (the inspections free it).
+        return {"picked": (+picked(disc), -hand_empty())}
 
     def execute(self, disc):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
@@ -713,8 +889,15 @@ class InspectBottom(Action):
         return presented(disc) & ~inspected(disc) & ~bottom_failed(disc)
 
     def eff(self, disc):
-        return {"pass": (+inspected(disc),),
-                "fail": (+bottom_failed(disc),)}
+        # The feed opens on a FAIL here (the disc never reaches the top
+        # camera) and on the top camera's verdict otherwise.
+        # column_done: this disc is a fail like any other "no disc", AND the
+        # position's remaining discs are void — done, never created.
+        mates = _column_mates(disc)
+        return {"pass":        (+inspected(disc),),
+                "fail":        (+bottom_failed(disc), +feed_free()),
+                "column_done": (+bottom_failed(disc), +feed_free(),
+                                *(f for d in mates for f in (+void(d), +done(d))))}
 
     def execute(self, disc):
         rt = self.ctx.runtime
@@ -728,12 +911,16 @@ class InspectBottom(Action):
             return False
         rt.count("inspect.bottom", **{v: 1})        # v is "pass" / "fail" / "empty"
         rt.record(_tag(disc), visual_bottom="none" if v == "empty" else v)
+        ended = _empty_run(self, disc, seen=(v != "empty"))
         if v != "pass":
             why = "bottom camera: no disc" if v == "empty" else "bottom camera: fail"
             self.ctx.meta.setdefault("verdict", {})[disc] = why
             rt.step(f"disc {disc + 1}: {why} → fail column")
             _publish(self, f"{_tag(disc)} — failed inspection", last_disc=disc + 1,
                      last_c=None, last_c_unit=None, last_result="fail")
+            if ended:
+                _end_column(self, disc)
+                return "column_done"
             return "fail"
         return "pass"
 
@@ -759,9 +946,8 @@ class Reject(Action):
 class PlaceAnode(Action):
     """Place the disc on the anode's "place" anchor with a SHORT exit
     (EXIT_CLEARANCE mm above the disc — the recipe's exit-leg number
-    form), then stand at VIEW_OFFSET so the robot camera has an
+    form), then stand at ANODE_VIEW so the robot camera has an
     unoccluded view of the disc for InspectTop."""
-    VIEW_OFFSET = [10, 50, 70, 0, 0, 0]  # anchor-frame [x, y, z, a, b, c]
     EXIT_CLEARANCE = 10                  # mm above the placed disc
     PRM      = dict(gravity_offset=PLACE_GRAV, soft_approach=False)
     # The stand to the viewing pose stays a deliberate unplanned straight
@@ -773,12 +959,14 @@ class PlaceAnode(Action):
     resource = "robot"
 
     def pre(self, disc):
-        # anode_free gates one-disc-at-a-time on the shared anode/cathode.
-        return inspected(disc) & anode_free() & ~on_anode(disc)
+        # anode_free gates one-disc-at-a-time on the shared anode/cathode;
+        # anode_clear is the camera's word that nothing is on it.
+        return inspected(disc) & anode_free() & anode_clear() & ~on_anode(disc)
 
     def eff(self, disc):
-        # Disc leaves the hand onto the anode: hand frees, anode occupied.
-        return {"on_anode": (+on_anode(disc), +hand_empty(), -anode_free())}
+        # Disc leaves the hand onto the anode: hand frees, anode occupied,
+        # and no longer known clear.
+        return {"on_anode": (+on_anode(disc), +hand_empty(), -anode_free(), -anode_clear())}
 
     def execute(self, disc):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
@@ -788,7 +976,7 @@ class PlaceAnode(Action):
         # exit=<number> pulls off just EXIT_CLEARANCE mm above the disc
         # (the approach keeps the recipe's full padding).
         rcp["anode"].place("place", exit=self.EXIT_CLEARANCE, **self.PRM)
-        rcp["anode"].stand("place", offset=self.VIEW_OFFSET, **self.STAND_PRM)
+        rcp["anode"].stand(ANODE_VIEW["anchor"], offset=ANODE_VIEW["offset"], **self.STAND_PRM)
         return "on_anode"
 
 
@@ -809,8 +997,13 @@ class InspectTop(Action):
         return on_anode(disc) & hand_empty() & ~anode_inspected(disc) & ~top_failed(disc)
 
     def eff(self, disc):
-        return {"pass": (+anode_inspected(disc),),
-                "fail": (+top_failed(disc),)}
+        # The cameras are done with this disc: the feed opens for the next
+        # Create. column_done as at the bottom camera.
+        mates = _column_mates(disc)
+        return {"pass":        (+anode_inspected(disc), +feed_free()),
+                "fail":        (+top_failed(disc), +feed_free()),
+                "column_done": (+top_failed(disc), +feed_free(),
+                                *(f for d in mates for f in (+void(d), +done(d))))}
 
     def execute(self, disc):
         rt = self.ctx.runtime
@@ -824,12 +1017,16 @@ class InspectTop(Action):
             return False
         rt.count("inspect.top", **{v: 1})           # v is "pass" / "fail" / "empty"
         rt.record(_tag(disc), visual_top="none" if v == "empty" else v)
+        ended = _empty_run(self, disc, seen=(v != "empty"))
         if v != "pass":
             why = "top camera: no disc" if v == "empty" else "top camera: fail"
             self.ctx.meta.setdefault("verdict", {})[disc] = why
             rt.step(f"disc {disc + 1}: {why} → no measurement, fail column")
             _publish(self, f"{_tag(disc)} — failed inspection on the anode", last_disc=disc + 1,
                      last_c=None, last_c_unit=None, last_result="fail")
+            if ended:
+                _end_column(self, disc)
+                return "column_done"
             return "fail"
         return "pass"
 
@@ -1005,6 +1202,43 @@ def _drop(action, disc, lane, why, held=True) -> bool:
     return True
 
 
+class CheckAnode(Action):
+    """Right after the pick off the anode: the robot camera looks at the
+    anode again, detector only. ``clear`` (default) — the anode is empty,
+    the hand has the disc, and the anode is known clear for the next
+    placement. ``occupied`` — a disc is still on the anode: whatever the
+    hand holds is a STUCK fail (Sort's fail_stuck lane), and the anode is
+    not clear, so ClearAnode runs before the next PlaceAnode. Either way
+    the run assumes a disc in the hand and goes on to Sort."""
+    params   = ["disc"]
+    duration = 6
+    resource = "robot"
+
+    def pre(self, disc):
+        return off_anode(disc) & ~anode_checked(disc)
+
+    def eff(self, disc):
+        return {"clear":    (+anode_checked(disc), +anode_clear()),
+                "occupied": (+anode_checked(disc), +anode_stuck(disc))}
+
+    def execute(self, disc):
+        rt = self.ctx.runtime
+        rt.step(f"disc {disc + 1}: check the anode after the pick")
+        rt.step(_progress_pct(self), level="progress")
+        found = _anode_seen(self)
+        if found is None:
+            rt.step(f"disc {disc + 1}: anode check read failed — recover the camera, then Resume")
+            return False
+        if found:
+            rt.step(f"disc {disc + 1}: a disc is STILL on the anode — this one is a stuck fail")
+            rt.record(_tag(disc), anode_after_pick="occupied")
+            _publish(self, f"{_tag(disc)} — anode still occupied", last_disc=disc + 1,
+                     last_c=None, last_c_unit=None, last_result="fail")
+            return "occupied"
+        rt.record(_tag(disc), anode_after_pick="clear")
+        return "clear"
+
+
 class Sort(Action):
     """Drop the disc off the anode into an OUT holder: a top-camera fail
     is bad outright; otherwise the measured capacitance decides."""
@@ -1028,7 +1262,7 @@ class Sort(Action):
     resource = "robot"
 
     def pre(self, disc):
-        return off_anode(disc) & ~done(disc)
+        return off_anode(disc) & anode_checked(disc) & ~done(disc)
 
     def eff(self, disc):
         # Disc dropped into the out holder: hand frees, disc done.
@@ -1036,8 +1270,11 @@ class Sort(Action):
 
     def execute(self, disc):
         rt = self.ctx.runtime
+        facts = (getattr(self.ctx, "state", None) or {}).get("facts") or set()
         verdict = self.ctx.meta.get("verdict", {}).get(disc)
-        if verdict is not None:
+        if (anode_stuck.name, disc) in facts:
+            lane, why = "fail_stuck", "anode still occupied after the pick"
+        elif verdict is not None:
             lane, why = "fail_visual", verdict
         else:
             c = self.ctx.meta.get("disc_c", {}).get(disc)
@@ -1103,5 +1340,5 @@ class OperatorPark(Park):
 
 # The route — the order an item meets the actions (workspace.bt.protocol).
 # Being listed here is what makes an action part of the run.
-ROUTE = [Start, Create, Pick, Present, InspectBottom, Reject, PlaceAnode, InspectTop,
-         CathodeDown, Measure, CathodeUp, PickAnode, Sort, Park]
+ROUTE = [Start, ClearAnode, Create, Pick, Present, InspectBottom, Reject, PlaceAnode, InspectTop,
+         CathodeDown, Measure, CathodeUp, PickAnode, CheckAnode, Sort, Park]

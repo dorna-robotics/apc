@@ -18,6 +18,18 @@ the fail column with no measurement. A disc the detector does not see
 at either camera is a fail too: the suction is never released mid-way,
 the hand goes to the fail column as if it held one.
 
+The anode is never trusted empty: `ClearAnode` images it at run start
+and after any pick that left a disc behind, blows it off from the
+anode's `blow` anchor and looks again, one action run per attempt, and
+pauses for the operator after `ClearAnode.MAX_BLOWS` blows of
+`ClearAnode.BLOW["seconds"]`. After every pick off the anode,
+`CheckAnode` looks once more; a disc still there makes the one in the
+hand a stuck fail. The fail holder is lanes (`LANES`): A1–A4 readings
+outside the window, A5 stuck, A6–A7 camera fails. Two "no disc"
+verdicts in a row from one IN position (`EMPTY_RUN_ENDS_COLUMN`) end
+that position: its remaining discs are voided, the run moves on. These
+three are parameters at the top of `actions.py` and on `ClearAnode`.
+
 ## Layout
 
 ```

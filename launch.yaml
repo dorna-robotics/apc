@@ -10,7 +10,8 @@
 # anode → cathode down → read C → cathode up → pick → sort to out good/bad
 # by the capacitance window (C_MIN..C_MAX in actions.py). Ordered drop:
 # pass fills out_good_1 then _2 (A1→A7); a fail by the reading fills out_bad_1
-# A1→A5, a fail by a camera out_bad_1 A6→A7 (LANES in actions.py); z steps
+# A1→A4, a stuck one (the anode still showed a disc after the pick) A5, a
+# fail by a camera out_bad_1 A6→A7 (LANES in actions.py); z steps
 # by Z_STEP per disc, max stack_size per slot. Every sorted disc is
 # deleted right after it's placed; Start sweeps leftovers from killed runs.
 
