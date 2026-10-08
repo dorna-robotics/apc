@@ -24,6 +24,9 @@
 //   last_disc    number of the disc last measured
 //   last_c       its capacitance           last_c_unit  the meter's unit
 //   last_result  "pass" | "fail"
+//   notice       {level, title, text} | absent    a card that needs the
+//                operator (the anode blocked after MAX_BLOWS); level is
+//                warning | error | info. Absent = no card.
 //
 // A key the protocol has not published yet renders as "—", never as 0:
 // a dash says "no data", a zero would claim the bench is untouched.
@@ -90,9 +93,12 @@ const CSS = `
 .root { height:100%; }          /* the mount wrapper — the chain .host > .root > .wrap must all have height for min-height:100% to mean the pane */
 .wrap { width:100%; min-height:100%; padding:var(--space-4); container-type:inline-size;
   display:flex; }
+/* the notice card (when there is one) over the columns, as wide as they
+   are; the stack centres in the pane on both axes */
+.stack { display:flex; flex-direction:column; gap:var(--space-5); width:fit-content;
+  max-width:100%; margin:auto; }
 .cols { display:grid; grid-template-columns:auto minmax(240px, 300px); gap:var(--space-5);
-  align-items:start; justify-content:center; width:fit-content; max-width:100%;
-  margin:auto; }
+  align-items:start; justify-content:center; width:100%; }
 .col { display:flex; flex-direction:column; gap:var(--space-5); min-width:0; }
 /* narrow pane: one column, the bench first */
 @container (max-width: 860px) {
@@ -100,6 +106,25 @@ const CSS = `
   .col.side { flex-direction:row; flex-wrap:wrap; }
   .col.side > .card { flex:1 1 240px; }
 }
+
+/* the notice: the operator is needed. The frame's own warning voice —
+   amber tint, amber border — a tracked-caps label, the title, one
+   sentence of what to do; the Resume it names is on the control rail. */
+.notice { display:flex; align-items:center; gap:var(--space-5);
+  padding:var(--space-5) var(--space-6); border-radius:var(--radius-lg);
+  border:1px solid rgba(255,159,10,.35); background:rgba(255,159,10,.12); }
+.notice svg { width:28px; height:28px; flex:none; }
+.notice .nt { display:flex; flex-direction:column; gap:var(--space-1); min-width:0; }
+.notice .nl { font-size:var(--text-xs); letter-spacing:.13em; text-transform:uppercase;
+  font-weight:700; opacity:.8; }
+.notice h2 { margin:0; font-size:var(--text-xl); font-weight:700; line-height:1.3; }
+.notice p { margin:0; font-size:var(--text-md); opacity:.85; line-height:1.4; }
+.notice[data-level="warning"] { color:var(--amber); }
+.notice[data-level="error"]   { color:var(--red); border-color:rgba(255,69,58,.35);
+  background:rgba(255,69,58,.12); }
+.notice[data-level="info"]    { color:var(--accent); border-color:rgba(10,132,255,.35);
+  background:rgba(10,132,255,.12); }
+.notice p { color:var(--text); }
 
 /* cards, everything centred in them */
 .card { background:var(--surface); border:1px solid var(--border);
@@ -278,11 +303,31 @@ function ringHtml(pct) {
   </div>`;
 }
 
+const LEVELS = { warning: "Operator needed", error: "Run stopped", info: "Notice" };
+
+function noticeHtml(n) {
+  if (!n || typeof n !== "object") return "";
+  const level = LEVELS[n.level] ? n.level : "warning";
+  return `<div class="notice" data-level="${level}" role="alert">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <div class="nt">
+      <span class="nl">${esc(LEVELS[level])}</span>
+      <h2>${esc(n.title || "")}</h2>
+      ${n.text ? `<p>${esc(n.text)}</p>` : ""}
+    </div>
+  </div>`;
+}
+
 function html(v) {
   const p = num(v.progress);
   const pct = p == null ? null : Math.max(0, Math.min(100, Math.round(p)));
   return `
   <div class="wrap">
+   <div class="stack">
+    ${noticeHtml(v.notice)}
     <div class="cols">
       <div class="col">
         <div class="card">
@@ -313,6 +358,7 @@ function html(v) {
         </div>
       </div>
     </div>
+   </div>
   </div>`;
 }
 

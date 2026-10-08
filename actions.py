@@ -17,11 +17,8 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
 
    1. Create        spawn the disc at its inventory position (top of the
                     remaining stack at its in-holder anchor).
-   2. Pick          suction-pick it off the IN stack: grab, lift straight
-                    up to a few mm under the holder's rim — the disc still
-                    inside the holder — shake the rail alone (a second
-                    disc stuck underneath falls back onto the stack, never
-                    outside), then lift straight out. Pick.PRM / VIBRATE_PRM.
+   2. Pick          suction-pick it off the IN stack and lift straight
+                    out (Pick.PRM).
    3. Present       carry it to the vertical inspection station.
    4. InspectBottom station camera: DETECT the disc (vision/disc_od.yaml), then
                     CLASSIFY the same view cropped to its box + CLS_ROI_OFFSET
@@ -327,15 +324,16 @@ def _verdict(res) -> str:
     return "pass" if _pass_prob(res) >= threshold else "fail"
 
 
-def _anode_seen(action):
+def _anode_seen(action, sim_return=[]):
     """Stand the robot camera over the anode (ANODE_VIEW) and run the
     DETECTOR alone. Returns the detector's hits (``[]`` = nothing on the
     anode), or ``None`` when the read failed (the declarative-retry
-    contract: the caller returns False, the operator recovers). In sim
-    the anode is empty — ``sim_return=[]`` — so a sim run never blows."""
+    contract: the caller returns False, the operator recovers).
+    ``sim_return`` is what the look sees in sim: empty — the anode is
+    clear — unless the caller says otherwise (ClearAnode's first look)."""
     rcp = action.ctx.recipes
     rcp["anode"].stand(ANODE_VIEW["anchor"], offset=ANODE_VIEW["offset"])
-    return rcp["inspector_robot"].detect(roi={"corners": [], "crop": False}, sim_return=[])
+    return rcp["inspector_robot"].detect(roi={"corners": [], "crop": False}, sim_return=sim_return)
 
 
 def _inspect(action, od_alias, cls_alias):
@@ -497,7 +495,10 @@ def _pos(holder, slot):
 
 def _publish(action, headline=None, active=None, **extra):
     """Push the operator-facing picture to the pendant. Replace semantics
-    per key (Runtime.op); observability never blocks the workflow."""
+    per key (Runtime.op); observability never blocks the workflow.
+    ``notice=dict(level, title, text)`` puts a card on the pendant that
+    needs the operator (level: warning | error | info); it is cleared
+    by the next publish without one."""
     meta = action.ctx.meta
     vals = dict(
         in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active,
@@ -513,6 +514,9 @@ def _publish(action, headline=None, active=None, **extra):
     )
     if headline is not None:
         vals["headline"] = headline
+    # The notice card: sent on EVERY publish — None removes the key
+    # (Runtime.op), so a card stays up exactly until the next picture.
+    vals["notice"] = extra.pop("notice", None)
     vals.update(extra)
     action.ctx.runtime.op(**vals)
 
@@ -713,20 +717,30 @@ class ClearAnode(Action):
     def execute(self):
         rt, rcp, ws = self.ctx.runtime, self.ctx.recipes, self.ctx.workspace
         rt.step("anode: looking for a disc")
-        found = _anode_seen(self)
+        # SIM: the first look of a run sees a disc, so a sim run shows
+        # the blow once (the same hit shape as the real detector's);
+        # after a blow the anode is clear. Real runs ignore sim_return.
+        found = _anode_seen(self, sim_return=(
+            [{"cls": "disc", "conf": 0.99, "center": [1100, 1200],
+              "corners": [[700, 750], [1550, 750], [1550, 1620], [700, 1620]]}]
+            if self.ctx.meta.get("blow_tries", 0) == 0 else []))
         if found is None:
             rt.step("anode: camera read failed — recover the camera, then Resume")
             return False
         if not found:
             self.ctx.meta["blow_tries"] = 0
             rt.step("anode: clear")
+            _publish(self, "Anode clear")          # also takes down the blocked card after a Resume
             return "clear"
         tries = self.ctx.meta.get("blow_tries", 0)
         if tries >= self.MAX_BLOWS:
             self.ctx.meta["blow_tries"] = 0
             rt.step(f"anode: still holds a disc after {tries} blows — clear the anode by hand, "
                     f"then Resume", level="warning")
-            _publish(self, "Anode blocked — clear it, then Resume")
+            _publish(self, "Anode blocked — clear it, then Resume",
+                     notice=dict(level="warning", title="Anode blocked",
+                                 text=f"A disc is still on the anode after {tries} blows. "
+                                      f"Clear the anode by hand, then press Resume."))
             rt.pause()
             rt.checkpoint()           # blocks until Resume; then this action runs again
             return False
@@ -784,26 +798,13 @@ class Create(Action):
 
 
 class Pick(Action):
-    """Suction-pick the disc off the IN stack, shake it inside the holder,
-    lift out — four recipe calls, each with its own parameters below:
-
-        pick(slot, **PRM)             grab; exit=False leaves the robot at the grip
-        retract(dist=rim − VIBRATE_BELOW_RIM)   straight up, the disc still in the holder
-        vibrate(**VIBRATE_PRM)        the rail alone, back to the same joints
-        retract(dist=rim + padding)   straight out, the recipe's own exit height
-
-    The rim is the holder's own geometry (its top anchor over the slot,
-    70 mm on stack_holder_disc_in), read at run time — one source."""
+    """Suction-pick the disc off the IN stack and lift straight out —
+    one recipe call, its parameters in PRM."""
     # soft_approach=True: stop at the gap above the stack, straight final
     # descent — matches the Sort side (smove travel blends otherwise).
-    # exit=False: no exit leg — the vibrate and the lift out are their own calls.
-    PRM       = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, exit=False)
-    # The vibrate: the carriage 2 mm each way, twice, every arm joint held;
-    # the disc's bottom VIBRATE_BELOW_RIM mm under the rim when it happens.
-    VIBRATE_PRM = dict(primitive="rail", pattern=[2, -2], cnt=2, vaj=[100, 500, 2000])
-    VIBRATE_BELOW_RIM = 10
+    PRM       = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True)
     params   = ["disc"]
-    duration = 13          # the pick, plus the vibrate inside the holder
+    duration = 10
     resource = "robot"
 
     def pre(self, disc):
@@ -822,20 +823,9 @@ class Pick(Action):
         rt.step(f"disc {disc + 1}: pick from in_{in_h}[{slot}]")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — picking from {_pos(in_h, slot)}", active=(in_h, slot))
-        site = rcp[f"disc_in_{in_h}"]
-        # The Rack recipe's component is the ADAPTER; pick/place resolve
-        # the stack holder sitting on it themselves. retract is a base
-        # verb, so the holder is named outright — the same one Create
-        # spawned the disc under.
-        holder = self.ctx.workspace.components[f"stack_holder_disc_in_{in_h}"]
-        body = holder.assembly["body"]
-        rim = float(body.anchors["top"][2]) - float(body.anchors[slot][2])   # slot anchor → rim
-        at = dict(anchor=slot, solid_name="body", component=holder)
-        site.pick(slot, **self.PRM)
-        site.retract(dist=rim - self.VIBRATE_BELOW_RIM, **at)
-        rt.step(f"disc {disc + 1}: vibrate, {self.VIBRATE_BELOW_RIM} mm under the rim")
-        site.vibrate(**self.VIBRATE_PRM)
-        site.retract(dist=rim + site.padding, **at)
+        # The Rack recipe's component is the ADAPTER; pick resolves the
+        # stack holder sitting on it itself.
+        rcp[f"disc_in_{in_h}"].pick(slot, **self.PRM)
         rt.count("disc.picked", n=1)
         # One more taken from that position: the pendant's in-stack state
         # (full → done) is computed from this, never from the plan.
