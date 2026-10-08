@@ -60,7 +60,7 @@ apc/
 ├── captures/           # the detections' pictures, one file per run per detection (git-ignored; saving off for now)
 ├── counts/             # rt.count's totals across every run — counts.json (git-ignored)
 ├── log/                # the project's console — workspace.log, written by the orchestrator (git-ignored)
-└── docs/               # the bench's sheets (LCR meter startup) — source, a read-only Docs tab
+└── docs/               # the bench's sheets (LCR meter startup, out holders — which position holds what) — source, a read-only Docs tab
 ```
 
 The last six are data folders, never source: `records:`, `replays:`,
