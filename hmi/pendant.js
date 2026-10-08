@@ -26,8 +26,11 @@
 //   last_result  "pass" | "fail"
 //   notice       {level, title, text} | absent    the operator is needed
 //                (the anode blocked after MAX_BLOWS): a MODAL over the
-//                whole screen, the bench dimmed behind it, until the next
-//                publish without one. level: warning | error | info.
+//                whole screen, the bench dimmed behind it. Its Dismiss
+//                button is the ONLY way to close it — a click on the
+//                backdrop does nothing — and a dismissed notice stays
+//                away until a different one arrives or the protocol
+//                publishes without one. level: warning | error | info.
 //
 // A key the protocol has not published yet renders as "—", never as 0:
 // a dash says "no data", a zero would claim the bench is untouched.
@@ -132,6 +135,11 @@ const CSS = `
 .modal p { margin:var(--space-2) 0 0; font-size:var(--text-lg); line-height:1.45; opacity:.9; }
 .modal .hint { margin-top:var(--space-4); font-size:var(--text-md); opacity:.7; }
 .modal .hint b { font-weight:700; opacity:1; }
+.modal .ack { margin-top:var(--space-5); padding:10px 26px; border-radius:var(--radius-sm);
+  border:1px solid var(--border); background:transparent; color:var(--text); font:inherit;
+  font-size:var(--text-md); font-weight:600; letter-spacing:.02em; cursor:pointer; }
+.modal .ack:hover { background:rgba(127,127,127,.12); }
+.modal .ack:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .modal[data-level="error"] { border-top-color:var(--red); }
 .modal[data-level="error"] .ico { background:rgba(255,69,58,.15); color:var(--red); }
 .modal[data-level="error"] .nl { color:var(--red); }
@@ -246,6 +254,13 @@ function fmtC(c, unit) {
 }
 
 let _root = null;
+let _last = {};          // the values last drawn — Dismiss redraws them
+let _ack = null;         // the notice the operator dismissed (its key), or null
+
+// A notice's identity: the same words are the same notice. Dismissed
+// once, it stays away until a DIFFERENT one arrives; gone from the
+// values (the protocol moved on), the slate is clean again.
+const noticeKey = n => JSON.stringify([n.level, n.title, n.text]);
 
 function benchHtml(v) {
   const ins   = (v.in_stacks  && typeof v.in_stacks  === "object") ? v.in_stacks  : {};
@@ -319,7 +334,8 @@ function ringHtml(pct) {
 const LEVELS = { warning: "Operator needed", error: "Run stopped", info: "Notice" };
 
 function noticeHtml(n) {
-  if (!n || typeof n !== "object") return "";
+  if (!n || typeof n !== "object") { _ack = null; return ""; }
+  if (noticeKey(n) === _ack) return "";
   const level = LEVELS[n.level] ? n.level : "warning";
   return `<div class="modal-bg"><div class="modal" data-level="${level}" role="alertdialog" aria-live="assertive">
     <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -330,7 +346,22 @@ function noticeHtml(n) {
     <h2>${esc(n.title || "")}</h2>
     ${n.text ? `<p>${esc(n.text)}</p>` : ""}
     <div class="hint">Then press <b>Resume</b> on the bar below.</div>
+    <button type="button" class="ack">Dismiss</button>
   </div></div>`;
+}
+
+// Draw, and wire the one control this screen has: Dismiss. The backdrop
+// has no handler on purpose — a stray tap on the bench must not take the
+// notice away.
+function render(v) {
+  _last = v || {};
+  _root.innerHTML = html(_last);
+  const ack = _root.querySelector(".modal .ack");
+  if (ack) ack.addEventListener("click", () => {
+    const n = _last.notice;
+    if (n && typeof n === "object") _ack = noticeKey(n);
+    render(_last);
+  });
 }
 
 function html(v) {
@@ -386,11 +417,11 @@ export default {
     _root = document.createElement("div");
     _root.className = "root";
     root.appendChild(_root);
-    _root.innerHTML = html(api && api.values ? api.values : {});
+    render(api && api.values ? api.values : {});
   },
 
   update(values) {
     if (!_root) return;
-    _root.innerHTML = html(values || {});
+    render(values || {});
   },
 };
