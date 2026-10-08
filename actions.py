@@ -685,7 +685,7 @@ class ClearAnode(Action):
     duration = 8
     resource = "robot"
     # The blow, three legs like a place. The ``blow`` anchor IS the blow
-    # pose (5 mm above place's height, 10 mm along -x, tilted -30° about
+    # pose (5 mm above place's height, 15 mm along -x, tilted -20° about
     # x — the component's anchors). A PLANNED, collision-checked travel
     # to ``hover``, 20 mm STRAIGHT UP from the anchor, clear of the
     # anode's box; then one jmove onto the anchor with no plan and no
@@ -694,16 +694,18 @@ class ClearAnode(Action):
     # outside the box.
     #
     # ``hover`` is an offset in the anchor's frame, and the anchor is
-    # tilted 30°, so straight up is (0, -sin 30°, cos 30°) × 20 — NOT
-    # [0, 0, 20], which is 20 mm back along the nozzle's axis. That
-    # point sits in the OTHER wrist branch from the blow pose (sim: the
-    # hover solved with j5 at -178°, the anchor with j5 at +97°), so the
-    # unplanned jmove between them swung j3/j4/j5 by 84/61/275° right
-    # over the anode. Straight up, both legs solve in one branch and
-    # the jmove moves no joint more than 9° (j1 8°, the rest under
-    # 6°). Change the tilt → change this.
+    # tilted 20°, so straight up is (0, -sin 20°, cos 20°) × 20 — NOT
+    # [0, 0, 20], which is 20 mm back along the nozzle's axis. Straight
+    # up, the hover and the blow point solve in ONE wrist branch and the
+    # unplanned jmove between them moves no joint more than 8° (sim);
+    # the first version hovered along the nozzle axis and the jmove
+    # flipped j3/j4/j5 by 84/61/275° over the anode. The branch is a
+    # property of the geometry, not of this offset: move the anchor,
+    # re-measure the jmove's deltas before trusting it (the anchor's
+    # comment names the one 5 mm that flips it). Change the tilt →
+    # change this.
     BLOW      = dict(anchor="blow",
-                     hover=[0, -10.0, 17.32, 0, 0, 0],
+                     hover=[0, -6.84, 18.79, 0, 0, 0],
                      at=[0, 0, 0, 0, 0, 0],
                      seconds=5.0)
     LEG_PRM   = dict(has_motion_plan=[False, "jmove"])   # the unplanned legs in and out

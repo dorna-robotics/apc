@@ -11,10 +11,14 @@ class Anode:
         anchors={"body": {
             "center": [0, 0, 0, 0, 0, 0],
             "place":  [0, 6.25, 106.24, 0, 0, 90],
-            # blow — the air-blow pose: 5 mm above place's height, 10 mm
-            # along -x, place's orientation tilted -30° about the body's x
-            # axis (rotate_abc; = [-23.513, 23.513, 87.752]).
-            "blow":   [-10-5, 6.25, 111.24, *rotate_abc([0, 0, 90], axis=[1, 0, 0], angle=-15, local=True)],
+            # blow — the air-blow pose: 5 mm above place's height, 15 mm
+            # along -x, place's orientation tilted -20° about the body's x
+            # axis (rotate_abc; = [-15.694, -15.694, 89.002]). The 5 mm is
+            # load-bearing: AT place height this point solves in the other
+            # wrist branch from its hover, and the unplanned jmove onto it
+            # swings j3/j4/j5 by 61/40/57° over the anode (sim); 5 mm up,
+            # under 8° (see ClearAnode.BLOW).
+            "blow":   [-15, 6.25, 111.24, *rotate_abc([0, 0, 90], axis=[1, 0, 0], angle=-20, local=True)],
             "top":    [0, 6.25, 106.24, 0, 0, 0],
             "hole_0":  [ 75,  37.5, 0, 0, 0, 0],
             "hole_1":  [-75,  37.5, 0, 0, 0, 0],
