@@ -744,7 +744,7 @@ class ClearAnode(Action):
             _publish(self, "Anode blocked — clear it, then Resume",
                      notice=dict(level="warning", title="Anode blocked",
                                  text=f"A disc is still on the anode after {tries} blows. "
-                                      f"Clear the anode by hand, then press Resume."))
+                                      f"Clear the anode by hand."))
             rt.pause()
             rt.checkpoint()           # blocks until Resume; then this action runs again
             return False

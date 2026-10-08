@@ -24,9 +24,10 @@
 //   last_disc    number of the disc last measured
 //   last_c       its capacitance           last_c_unit  the meter's unit
 //   last_result  "pass" | "fail"
-//   notice       {level, title, text} | absent    a card that needs the
-//                operator (the anode blocked after MAX_BLOWS); level is
-//                warning | error | info. Absent = no card.
+//   notice       {level, title, text} | absent    the operator is needed
+//                (the anode blocked after MAX_BLOWS): a MODAL over the
+//                whole screen, the bench dimmed behind it, until the next
+//                publish without one. level: warning | error | info.
 //
 // A key the protocol has not published yet renders as "—", never as 0:
 // a dash says "no data", a zero would claim the bench is untouched.
@@ -107,24 +108,36 @@ const CSS = `
   .col.side > .card { flex:1 1 240px; }
 }
 
-/* the notice: the operator is needed. The frame's own warning voice —
-   amber tint, amber border — a tracked-caps label, the title, one
-   sentence of what to do; the Resume it names is on the control rail. */
-.notice { display:flex; align-items:center; gap:var(--space-5);
-  padding:var(--space-5) var(--space-6); border-radius:var(--radius-lg);
-  border:1px solid rgba(255,159,10,.35); background:rgba(255,159,10,.12); }
-.notice svg { width:28px; height:28px; flex:none; }
-.notice .nt { display:flex; flex-direction:column; gap:var(--space-1); min-width:0; }
-.notice .nl { font-size:var(--text-xs); letter-spacing:.13em; text-transform:uppercase;
-  font-weight:700; opacity:.8; }
-.notice h2 { margin:0; font-size:var(--text-xl); font-weight:700; line-height:1.3; }
-.notice p { margin:0; font-size:var(--text-md); opacity:.85; line-height:1.4; }
-.notice[data-level="warning"] { color:var(--amber); }
-.notice[data-level="error"]   { color:var(--red); border-color:rgba(255,69,58,.35);
-  background:rgba(255,69,58,.12); }
-.notice[data-level="info"]    { color:var(--accent); border-color:rgba(10,132,255,.35);
-  background:rgba(10,132,255,.12); }
-.notice p { color:var(--text); }
+/* the notice: the operator is needed — a modal over the whole screen.
+   The host is the pane; the backdrop fills it and dims the bench, the
+   dialog sits in the middle, in the frame's own warning voice. The
+   control rail under the pane stays reachable: the Resume it names
+   is there. */
+:host { position:relative; }
+.modal-bg { position:absolute; inset:0; z-index:10; display:flex; align-items:center;
+  justify-content:center; padding:var(--space-6); background:rgba(0,0,0,.5); }
+.modal { width:min(560px, 100%); background:var(--surface); border-radius:var(--radius-lg);
+  box-shadow:0 12px 48px rgba(0,0,0,.4); padding:var(--space-6) 32px 28px;
+  display:flex; flex-direction:column; align-items:center; gap:var(--space-3);
+  text-align:center; border-top:5px solid var(--amber);
+  animation:notice-in var(--motion-med) var(--ease) both; }
+@keyframes notice-in { from { transform:scale(.96); opacity:0; } to { transform:none; opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .modal { animation:none; } }
+.modal .ico { width:64px; height:64px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; background:rgba(255,159,10,.15); color:var(--amber); margin-bottom:var(--space-2); }
+.modal .ico svg { width:34px; height:34px; }
+.modal .nl { font-size:var(--text-sm); letter-spacing:.14em; text-transform:uppercase;
+  font-weight:700; color:var(--amber); }
+.modal h2 { margin:0; font-size:26px; font-weight:700; line-height:1.2; }
+.modal p { margin:var(--space-2) 0 0; font-size:var(--text-lg); line-height:1.45; opacity:.9; }
+.modal .hint { margin-top:var(--space-4); font-size:var(--text-md); opacity:.7; }
+.modal .hint b { font-weight:700; opacity:1; }
+.modal[data-level="error"] { border-top-color:var(--red); }
+.modal[data-level="error"] .ico { background:rgba(255,69,58,.15); color:var(--red); }
+.modal[data-level="error"] .nl { color:var(--red); }
+.modal[data-level="info"] { border-top-color:var(--accent); }
+.modal[data-level="info"] .ico { background:rgba(10,132,255,.15); color:var(--accent); }
+.modal[data-level="info"] .nl { color:var(--accent); }
 
 /* cards, everything centred in them */
 .card { background:var(--surface); border:1px solid var(--border);
@@ -308,26 +321,25 @@ const LEVELS = { warning: "Operator needed", error: "Run stopped", info: "Notice
 function noticeHtml(n) {
   if (!n || typeof n !== "object") return "";
   const level = LEVELS[n.level] ? n.level : "warning";
-  return `<div class="notice" data-level="${level}" role="alert">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  return `<div class="modal-bg"><div class="modal" data-level="${level}" role="alertdialog" aria-live="assertive">
+    <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
       <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-    <div class="nt">
-      <span class="nl">${esc(LEVELS[level])}</span>
-      <h2>${esc(n.title || "")}</h2>
-      ${n.text ? `<p>${esc(n.text)}</p>` : ""}
-    </div>
-  </div>`;
+    </svg></div>
+    <span class="nl">${esc(LEVELS[level])}</span>
+    <h2>${esc(n.title || "")}</h2>
+    ${n.text ? `<p>${esc(n.text)}</p>` : ""}
+    <div class="hint">Then press <b>Resume</b> on the bar below.</div>
+  </div></div>`;
 }
 
 function html(v) {
   const p = num(v.progress);
   const pct = p == null ? null : Math.max(0, Math.min(100, Math.round(p)));
   return `
+  ${noticeHtml(v.notice)}
   <div class="wrap">
    <div class="stack">
-    ${noticeHtml(v.notice)}
     <div class="cols">
       <div class="col">
         <div class="card">
