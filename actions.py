@@ -679,16 +679,25 @@ class ClearAnode(Action):
     duration = 8
     resource = "robot"
     # The blow, three legs like a place. The ``blow`` anchor IS the blow
-    # pose (place's height, 10 mm along -x, tilted -30° about x — the
-    # component's anchors). A PLANNED, collision-checked travel to
-    # ``hover``, 20 mm back along the anchor's z (the nozzle's axis —
-    # the anchor is tilted, so this is along the tilt, not world height),
-    # clear of the anode's box; then one jmove onto the anchor with no
-    # plan and no collision check — the way a place's final descent is
-    # — the air, and the same jmove back out, so the next planned travel
-    # starts outside the box.
+    # pose (5 mm above place's height, 10 mm along -x, tilted -30° about
+    # x — the component's anchors). A PLANNED, collision-checked travel
+    # to ``hover``, 20 mm STRAIGHT UP from the anchor, clear of the
+    # anode's box; then one jmove onto the anchor with no plan and no
+    # collision check — the way a place's final descent is — the air,
+    # and the same jmove back out, so the next planned travel starts
+    # outside the box.
+    #
+    # ``hover`` is an offset in the anchor's frame, and the anchor is
+    # tilted 30°, so straight up is (0, -sin 30°, cos 30°) × 20 — NOT
+    # [0, 0, 20], which is 20 mm back along the nozzle's axis. That
+    # point sits in the OTHER wrist branch from the blow pose (sim: the
+    # hover solved with j5 at -178°, the anchor with j5 at +97°), so the
+    # unplanned jmove between them swung j3/j4/j5 by 84/61/275° right
+    # over the anode. Straight up, both legs solve in one branch and
+    # the jmove moves no joint more than 9° (j1 8°, the rest under
+    # 6°). Change the tilt → change this.
     BLOW      = dict(anchor="blow",
-                     hover=[0, 0, 20, 0, 0, 0],
+                     hover=[0, -10.0, 17.32, 0, 0, 0],
                      at=[0, 0, 0, 0, 0, 0],
                      seconds=5.0)
     LEG_PRM   = dict(has_motion_plan=[False, "jmove"])   # the unplanned legs in and out
