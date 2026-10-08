@@ -63,8 +63,10 @@ disc left behind: image the anode; nothing there → ``anode_clear``;
 something there → go to the anode's ``blow`` anchor, blow, and return
 with no fact changed, so the planner selects it again — one action run
 per attempt, no loop. After MAX_BLOWS attempts in a row it pauses for
-the operator to clear the anode and Resume. PlaceAnode needs
-``anode_clear`` and takes it away.
+the operator to clear the anode and Resume. Pick and PlaceAnode need
+``anode_clear`` (PlaceAnode takes it away): no disc is taken while the
+anode holds one — the blow-off needs the hand empty, so a disc picked
+first would leave the run with nowhere to go.
 
 Then Park once every disc is DONE — sorted, rejected or void. ``done`` is
 the closure fact every way out asserts. ``ROUTE`` at the bottom of this
@@ -808,8 +810,14 @@ class Pick(Action):
     resource = "robot"
 
     def pre(self, disc):
-        # hand_empty gates one-disc-at-a-time in the gripper.
-        return created(disc) & hand_empty() & ~picked(disc)
+        # hand_empty gates one-disc-at-a-time in the gripper. anode_clear:
+        # no disc is taken while the anode holds one — the blow-off is the
+        # suction's own release, so ClearAnode needs the hand empty, and a
+        # disc picked before the anode is clear leaves the run with nowhere
+        # to go. The route planner takes an item's step before a run-level
+        # one once the item has started (Create ran); this fact is what
+        # puts ClearAnode first.
+        return created(disc) & hand_empty() & anode_clear() & ~picked(disc)
 
     def eff(self, disc):
         # Disc leaves the feed into the hand: feed frees, hand fills.

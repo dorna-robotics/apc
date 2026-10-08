@@ -24,7 +24,9 @@ anode's `blow` anchor and looks again, one action run per attempt, and
 pauses for the operator after `ClearAnode.MAX_BLOWS` blows of
 `ClearAnode.BLOW["seconds"]`. After every pick off the anode,
 `CheckAnode` looks once more; a disc still there makes the one in the
-hand a stuck fail. The fail holder is lanes (`LANES`): A1–A4 readings
+hand a stuck fail. No disc is picked while the anode holds one (`Pick`
+needs `anode_clear`, as `PlaceAnode` does): the blow-off needs the hand
+empty. The fail holder is lanes (`LANES`): A1–A4 readings
 outside the window, A5 stuck, A6–A7 camera fails. Two "no disc"
 verdicts in a row from one IN position (`EMPTY_RUN_ENDS_COLUMN`) end
 that position: its remaining discs are voided, the run moves on. These
