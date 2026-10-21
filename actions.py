@@ -17,8 +17,11 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
 
    1. Create        spawn the disc at its inventory position (top of the
                     remaining stack at its in-holder anchor).
-   2. Pick          suction-pick it off the IN stack and lift straight
-                    out (Pick.PRM).
+   2. Pick          suction-pick it off the IN stack: grab, lift straight
+                    up to a few mm under the holder's rim — the disc still
+                    inside the holder — shake the rail alone (a second
+                    disc stuck underneath falls back onto the stack, never
+                    outside), then lift straight out. Pick.PRM / VIBRATE_PRM.
    3. Present       carry it to the vertical inspection station.
    4. InspectBottom station camera: DETECT the disc (vision/disc_od.yaml), then
                     CLASSIFY the same view cropped to its box + CLS_ROI_OFFSET
@@ -55,7 +58,8 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
   13. Sort          drop it into an OUT holder by its LANE (LANES): a
                     camera fail → the fail holder's A6–A7; stuck → A5; a
                     reading outside C_MIN..C_MAX → A1–A4; a pass → the
-                    pass holders, out_good_1 then _2. Ordered fill.
+                    pass holder and slot that MIRROR where it was picked
+                    (in_2 A3 → out_good_2 A3).
 
 And ONE run-level action, ClearAnode, planned wherever the anode is not
 known clear — right after Start, and after any CheckAnode that saw a
@@ -84,8 +88,11 @@ from the facts at Park. The run's ``records/<start>/records.csv``
 (launch.yaml ``records:``) is the client's sheet.
 
 The DROP is ORDERED by a fill counter (ctx.meta["filled"]) along a LANE —
-an ordered list of (holder, slot) positions, one lane per verdict (LANES):
-  * pass          out_good_1 A1→A7, then out_good_2 A1→A7
+an ordered list of (holder, slot) positions, one lane per verdict (_lane):
+  * pass          the MIRROR of the disc's IN position: in_k Ax → out_good_k
+                  Ax, so a pass holder reads like the IN holder it came
+                  from. A position holds at most MAX_PER_SLOT discs on
+                  either side, so a pass position never overflows.
   * fail_measure  out_bad_1 A1→A4 — the reading outside the window
   * fail_stuck    out_bad_1 A5    — the anode still showed a disc after the pick
   * fail_visual   out_bad_1 A6→A7 — a camera said fail, or saw no disc
@@ -218,16 +225,16 @@ _STEPS = 13                                    # per-disc steps for progress (no
 # ── Where a disc lands — the LANES ───────────────────────────────────
 # A lane is an ORDERED list of (holder alias, slot) positions, filled in
 # that order, MAX_PER_SLOT discs each (z stepping by Z_STEP), one lane per
-# verdict. The fail holder is split: A1–A4 take the discs whose READING
-# was outside the window, A5 the discs the hand held while the anode
-# still showed one (STUCK — what the hand holds is not trusted), A6–A7
-# the discs a CAMERA failed (or saw no disc), so the kinds never mix in
-# one stack. Which lane a disc takes is decided in Sort / Reject; _drop
-# only walks it.
-PASS_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]
+# verdict. A PASS goes to the mirror of where it was picked — in_k Ax →
+# PASS_HOLDERS[k-1] Ax, one position (_lane). The fail holder is split:
+# A1–A4 take the discs whose READING was outside the window, A5 the discs
+# the hand held while the anode still showed one (STUCK — what the hand
+# holds is not trusted), A6–A7 the discs a CAMERA failed (or saw no disc),
+# so the kinds never mix in one stack. Which lane a disc takes is decided
+# in Sort / Reject; _drop only walks it.
+PASS_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]    # in_1's mirror, in_2's mirror
 FAIL_HOLDER  = "disc_out_bad_1"
 LANES = {
-    "pass":         [(h, s) for h in PASS_HOLDERS for s in SLOTS],
     "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[0:4]],     # A1..A4
     "fail_stuck":   [(FAIL_HOLDER, s) for s in SLOTS[4:5]],     # A5
     "fail_visual":  [(FAIL_HOLDER, s) for s in SLOTS[5:7]],     # A6, A7
@@ -245,10 +252,19 @@ ANODE_VIEW = dict(anchor="place", offset=[10, 50, 70, 0, 0, 0])
 # fine here because a batch is run start-to-finish and sorted discs are
 # terminal — every one is DELETED right after place().
 
-def _next_drop(filled, lane):
-    """Next (holder, slot, z, count) along ``lane`` — the first position
-    with room, its stack height. None when the whole lane is full."""
-    for holder, slot in LANES[lane]:
+def _lane(disc, lane):
+    """The (holder, slot) positions ``lane`` offers this disc: a pass, the
+    one mirror of its IN position (INVENTORY); a fail, the lane in LANES."""
+    if lane == "pass":
+        in_h, slot, _z = INVENTORY[disc]
+        return [(PASS_HOLDERS[in_h - 1], slot)]
+    return LANES[lane]
+
+
+def _next_drop(filled, positions):
+    """Next (holder, slot, z, count) along ``positions`` — the first one
+    with room, its stack height. None when every one is full."""
+    for holder, slot in positions:
         count = filled.get((holder, slot), 0)
         if count < MAX_PER_SLOT:
             return holder, slot, round(count * Z_STEP, 3), count
@@ -804,13 +820,26 @@ class Create(Action):
 
 
 class Pick(Action):
-    """Suction-pick the disc off the IN stack and lift straight out —
-    one recipe call, its parameters in PRM."""
+    """Suction-pick the disc off the IN stack, shake it inside the holder,
+    lift out — four recipe calls, each with its own parameters below:
+
+        pick(slot, **PRM)             grab; exit=False leaves the robot at the grip
+        retract(dist=rim − VIBRATE_BELOW_RIM)   straight up, the disc still in the holder
+        vibrate(**VIBRATE_PRM)        the rail alone, back to the same joints
+        retract(dist=rim + padding)   straight out, the recipe's own exit height
+
+    The rim is the holder's own geometry (its top anchor over the slot,
+    70 mm on stack_holder_disc_in), read at run time — one source."""
     # soft_approach=True: stop at the gap above the stack, straight final
     # descent — matches the Sort side (smove travel blends otherwise).
-    PRM       = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True)
+    # exit=False: no exit leg — the vibrate and the lift out are their own calls.
+    PRM       = dict(tool_tcp_z_offset=PICK_TCP_Z, soft_approach=True, exit=False)
+    # The vibrate: the carriage 1 mm each way, twice, every arm joint held;
+    # the disc's bottom VIBRATE_BELOW_RIM mm under the rim when it happens.
+    VIBRATE_PRM = dict(primitive="rail", pattern=[1, -1], cnt=2, vaj=[100, 500, 2000])
+    VIBRATE_BELOW_RIM = 10
     params   = ["disc"]
-    duration = 10
+    duration = 13          # the pick, plus the vibrate inside the holder
     resource = "robot"
 
     def pre(self, disc):
@@ -835,9 +864,20 @@ class Pick(Action):
         rt.step(f"disc {disc + 1}: pick from in_{in_h}[{slot}]")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — picking from {_pos(in_h, slot)}", active=(in_h, slot))
-        # The Rack recipe's component is the ADAPTER; pick resolves the
-        # stack holder sitting on it itself.
-        rcp[f"disc_in_{in_h}"].pick(slot, **self.PRM)
+        site = rcp[f"disc_in_{in_h}"]
+        # The Rack recipe's component is the ADAPTER; pick/place resolve
+        # the stack holder sitting on it themselves. retract is a base
+        # verb, so the holder is named outright — the same one Create
+        # spawned the disc under.
+        holder = self.ctx.workspace.components[f"stack_holder_disc_in_{in_h}"]
+        body = holder.assembly["body"]
+        rim = float(body.anchors["top"][2]) - float(body.anchors[slot][2])   # slot anchor → rim
+        at = dict(anchor=slot, solid_name="body", component=holder)
+        site.pick(slot, **self.PRM)
+        site.retract(dist=rim - self.VIBRATE_BELOW_RIM, **at)
+        rt.step(f"disc {disc + 1}: vibrate, {self.VIBRATE_BELOW_RIM} mm under the rim")
+        site.vibrate(**self.VIBRATE_PRM)
+        site.retract(dist=rim + site.padding, **at)
         rt.count("disc.picked", n=1)
         # One more taken from that position: the pendant's in-stack state
         # (full → done) is computed from this, never from the plan.
@@ -1165,8 +1205,8 @@ class PickAnode(Action):
 
 
 def _drop(action, disc, lane, why, held=True) -> bool:
-    """Drop the held disc into the next position of ``lane`` (LANES —
-    pass / fail_measure / fail_visual), then DELETE it — sorted discs are
+    """Drop the held disc into the next position of ``lane`` (_lane —
+    pass / fail_measure / fail_stuck / fail_visual), then DELETE it — sorted discs are
     terminal and never linger in the scene. Shared by Sort and Reject.
     False when the lane is full (the action fails, the run pauses).
 
@@ -1181,10 +1221,11 @@ def _drop(action, disc, lane, why, held=True) -> bool:
     rt, rcp, ws = action.ctx.runtime, action.ctx.recipes, action.ctx.workspace
     good = lane == "pass"
     filled = action.ctx.meta.setdefault("filled", {})   # (holder, slot) → n dropped
-    nxt = _next_drop(filled, lane)
+    positions = _lane(disc, lane)
+    nxt = _next_drop(filled, positions)
     if nxt is None:
         rt.step(f"disc {disc + 1}: the {lane} lane is FULL — "
-                + ", ".join(f"{h}[{s}]" for h, s in LANES[lane]))
+                + ", ".join(f"{h}[{s}]" for h, s in positions))
         return False
     holder, slot, z, count = nxt
     rt.step(f"disc {disc + 1}: {'GOOD' if good else 'BAD'} ({why}) → {holder}[{slot}] z={z}")
@@ -1255,7 +1296,7 @@ class Sort(Action):
     is bad outright; otherwise the measured capacitance decides."""
     # Good/bad capacitance window (Farads). Defaulted WIDE so everything
     # currently lands in "good" — set the real spec later. Where a disc
-    # lands by verdict is LANES (module level, shared with Reject).
+    # lands by verdict is _lane (module level, shared with Reject).
     C_MIN = 0.0
     C_MAX = 1.0e9
     # The place into ANY out holder (good and bad — Sort and Reject both

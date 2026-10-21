@@ -12,8 +12,11 @@ a stack, the earlier it came through.
 A disc passed by both cameras whose capacitance reading is inside the
 window (`Sort.C_MIN … C_MAX`, `actions.py`).
 
-Fills **Pass 1 A1 → A7**, then **Pass 2 A1 → A7**. Fourteen positions
-of 200 take a whole run (both IN holders full), so the pass lane never
+A pass disc goes to the **same position it was picked from**, in the
+pass holder of the same number: **In 1 A3 → Pass 1 A3**, **In 2 A5 →
+Pass 2 A5**. So each pass holder reads like its IN holder, and you can
+see at a glance which pass stack came from which IN stack. A position
+holds at most a stack's worth on both sides, so a pass position never
 fills up mid-run.
 
 ## Fail 1 — the bad discs, by what went wrong
@@ -86,12 +89,12 @@ fail tally, and the last reading.
 
 | Holder | Positions | Holds | Decided by |
 |---|---|---|---|
-| Pass 1, Pass 2 | A1 → A7, A1 → A7 | capacitance inside the window | the meter (`Sort`) |
+| Pass 1, Pass 2 | the IN position it came from (In 2 A3 → Pass 2 A3) | capacitance inside the window | the meter (`Sort`) |
 | Fail 1 | A1 → A4 | reading outside the window | the meter (`Sort`) |
 | Fail 1 | A5 | a disc was still on the anode after the pick | robot camera (`CheckAnode`) |
 | Fail 1 | A6 → A7 | a camera said fail, or saw no disc | station camera (`Reject`), robot camera (`Sort`) |
 
-Set in `actions.py`: the lanes (`LANES`), the window (`Sort.C_MIN`,
+Set in `actions.py`: the fail lanes (`LANES`), the pass mirror (`_lane`), the window (`Sort.C_MIN`,
 `Sort.C_MAX`), the blow tries (`ClearAnode.MAX_BLOWS`), the empties
 that end a position (`EMPTY_RUN_ENDS_COLUMN`). The stack size is
 `stack_size` in `hmi/default.j2`.
