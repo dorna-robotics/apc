@@ -27,7 +27,7 @@
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
 //                [cx, cy, r], sectors [36], coverage, cov_min, offset,
-//                off_max, cls {box, state, p, min}, img, w, h} — img an
+//                off_max, cls {circle, state, p, min}, img, w, h} — img an
 //                rt.asset path (api.url makes it loadable), w × h the
 //                frame it is in; absent in sim. Drawn as the inspection
 //                card under the columns: four tiles over the one frame.
@@ -63,7 +63,7 @@
 //
 // THE INSPECTION CARD — the last verdict, drawn on its own frame: (1) the
 // detector's box, (2) the disc's two circles, (3) the edge's 36 sectors,
-// green whole / red missing, (4) the square the classifier sees. One
+// green whole / red missing, (4) the face the classifier sees. One
 // picture (an rt.asset, held in memory by the runtime), every mark and
 // label drawn here over it — sharp at any size, nothing burned into
 // pixels. The card is built once per inspection and its element reused
@@ -462,11 +462,14 @@ function inspectionHtml(c) {
       stroke="${ok ? IC.whole : IC.miss}" stroke-width="${(ok ? 7 : 11) * sw}" stroke-linecap="round"/>`;
   }).join("") : "";
   const t3 = svg(near, pic + (o ? `<circle cx="${o[0]}" cy="${o[1]}" r="${o[2]}" fill="rgba(0,0,0,.18)"/>` : "") + segs);
-  // the classifier's square — exactly the crop it is handed (the box +
-  // CLS_ROI_OFFSET px), the frame beyond it shown as the server pads it
-  const k = c.cls && c.cls.box;
-  const t4 = k ? `<svg viewBox="${k[0]} ${k[1]} ${k[2] - k[0]} ${k[3] - k[1]}" preserveAspectRatio="xMidYMid meet">
-      <rect x="${k[0]}" y="${k[1]}" width="${k[2] - k[0]}" height="${k[3] - k[1]}" fill="#8e8e93"/>${pic}</svg>` : "";
+  // the classifier's input — exactly the crop it is handed: the face
+  // circle, grey outside (the vision ROI's own fill)
+  const f = c.cls && c.cls.circle;
+  const clip = `cls-${esc(c.disc)}-${esc(c.cam).replace(/\W/g, "")}`;
+  const t4 = svg(near, `<rect width="${W}" height="${H}" fill="#808080"/>` + (f ? `<defs><clipPath id="${clip}">
+      <circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}"/></clipPath></defs><g clip-path="url(#${clip})">${pic}</g>
+      <circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}" fill="none" stroke="rgba(255,255,255,.85)"
+        stroke-width="${1.6 * sw}" stroke-dasharray="${6 * sw} ${5 * sw}"/>` : ""));
   const cov = num(c.coverage), off = num(c.offset), offMax = num(c.off_max);
   const cs = c.cls ? c.cls.state : null;
   // Where the disc stopped (actions.py ``failed_at``): the checks run
@@ -517,11 +520,11 @@ function inspectionHtml(c) {
 const cap = s => { const t = String(s || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 // A not-run tile's outline — what that tile would have drawn: the two
-// circles, the sectored edge, the classifier's square around the disc.
+// circles, the sectored edge, the face the classifier sees.
 const PH_ICON = {
   2: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17"/><circle cx="24" cy="24" r="12.5"/></svg>`,
   3: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17" stroke-dasharray="7.5 3.2"/></svg>`,
-  4: `<svg viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="34" rx="4" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="11"/></svg>`,
+  4: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="15" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="2.5"/></svg>`,
 };
 
 // The card's element for these values — rebuilt only when the inspection

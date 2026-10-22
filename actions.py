@@ -27,8 +27,8 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     then the RING on its box: the yellow band's two circles
                     (vision/disc_ring.yaml) — the outer one the disc's size,
                     whole (ring_coverage), concentric (ring_offset);
-                    then CLASSIFY the disc on its box + CLS_ROI_OFFSET px
-                    (vision/disc_cls.yaml). Two
+                    then CLASSIFY its face — the masked circle inside the
+                    band (vision/disc_cls.yaml). Two
                     outcomes:
                       pass  → on to the anode;
                       fail  → Reject: straight to the fail column. A disc
@@ -208,6 +208,13 @@ def _schema_default(key):
 # finds the disc itself); the circles are then found on the detector's box
 # grown by this many px (roi.offset on the box corners), cropped.
 CLS_ROI_OFFSET     = 100
+# The classifier sees the disc's FACE: a 72-point circle FACE_MARGIN px
+# inside the face's circle (the band's inner edge, or the disc's edge on
+# the robot camera — STATION / ROBOT ``face``), grey outside, cropped to
+# its box (_face_roi). Exactly how the face model's training crops were
+# cut (the disc_faces set: same circles, same margin, the same vision ROI)
+# — change one, change both.
+FACE_MARGIN        = 10
 # Classifier SENSITIVITY — the ``classifier`` kwarg (hmi/default.j2, set on
 # the setup screen). The model gives a probability that the disc is a
 # pass; a disc passes only if that probability clears the threshold.
@@ -417,7 +424,7 @@ def _detect(action, od_alias):
 
 
 # The two cameras, one flow (_inspect): the detector, the circles on its
-# box, the classifier on the square crop. ``band``: the camera sees the
+# box, the classifier on the disc's face. ``band``: the camera sees the
 # yellow band, so the band's inner edge is found and the two centres
 # judged (concentric); the robot camera (a dark holder, no band) judges
 # the disc's edge for a chip only.
@@ -429,10 +436,13 @@ def _detect(action, od_alias):
 #   "closest"  the robot camera: no mask, so the holder's recess rings
 #              (5–12 % larger) are there too; the disc's edge is the one
 #              nearest the box's size
+# ``face``: the circle the face is cut inside — the band's inner edge on
+# the station camera (the grey face, no band in it), the disc's edge on
+# the robot camera (no band there).
 STATION = {"name": "bottom camera", "od": "inspector", "ring": "inspector_ring",
-           "cls": "inspector_cls", "band": True, "edge": "largest"}
+           "cls": "inspector_cls", "band": True, "edge": "largest", "face": "inner"}
 ROBOT   = {"name": "top camera", "od": "inspector_robot", "ring": "inspector_robot_ring",
-           "cls": "inspector_robot_cls", "band": False, "edge": "closest"}
+           "cls": "inspector_robot_cls", "band": False, "edge": "closest", "face": "outer"}
 
 
 def _diameter(corners):
@@ -483,6 +493,16 @@ def _circles(action, cam, box):
     return outer, max(band, key=lambda c: _diameter(c["corners"]), default=None)
 
 
+def _face_roi(circle):
+    """The disc's face as an ROI: a 72-point circle FACE_MARGIN px inside
+    ``circle``, grey outside, cropped to its box — the classifier's input,
+    cut exactly as its training crops were."""
+    (cx, cy), r = circle["center"], _diameter(circle["corners"]) / 2 - FACE_MARGIN
+    return {"corners": [[round(cx + r * math.cos(math.radians(a))), round(cy + r * math.sin(math.radians(a)))]
+                        for a in range(0, 360, 5)],
+            "crop": True}
+
+
 def _judge(action, cam, outer, inner, box):
     """A camera's verdict on its circles: ``(why, m, stage)`` — why "" when
     they pass, else what failed it; m the measurements for the records
@@ -521,7 +541,7 @@ def _judge(action, cam, outer, inner, box):
 
 # ── The inspection card (the pendant's "Last inspection") ─────────────
 # Every inspection's verdict, drawn on its own frame: the detector's box,
-# the disc's two circles, the edge's 36 sectors, the classifier's crop. rt.op
+# the disc's two circles, the edge's 36 sectors, the face the classifier sees. rt.op
 # carries the numbers (``inspection``); the frame is an rt.asset — held in
 # memory, never on disk — the pendant loads by URL. Fetching the frame is
 # observability, so it never holds the robot (project-guide §8): a worker
@@ -580,9 +600,8 @@ _CARD = _CardWorker()
 def _inspect(action, cam, disc):
     """One camera's check (STATION / ROBOT): the detector; the circles on
     its box (_circles), judged (_judge); then — unless the classifier is
-    ignored — the classifier on the detector's box grown by
-    CLS_ROI_OFFSET px, cropped: the square crop the model was trained on
-    (a model of the bare face would take the face instead). Returns
+    ignored — the classifier on the disc's face (_face_roi): the masked
+    circle its model is trained on. Returns
     ``(v, why, m)``: v ``"pass"`` /
     ``"fail"`` / ``"empty"``, why the fail, m the ring's measurements — or
     None when a read failed (declarative retry: the caller returns False,
@@ -616,27 +635,28 @@ def _inspect(action, cam, disc):
     card.update(outer=_circle(outer), inner=_circle(inner),
                 sectors=outer.get("sectors") if outer else None)
     threshold = CLS_MODES[CLS_MODE]
-    # the classifier's tile: the square it sees, and its state until it
-    # speaks — off when ignored (a disc that fails before it is drawn as
-    # not run, by failed_at)
-    card["cls"] = {"box": [round(v, 1) for v in (min(xs) - CLS_ROI_OFFSET, min(ys) - CLS_ROI_OFFSET,
-                                                 max(xs) + CLS_ROI_OFFSET, max(ys) + CLS_ROI_OFFSET)],
-                   "state": "off"}
+    # the face the classifier is handed — the camera's ``face`` circle; the
+    # checks before it make sure it exists (a disc without one fails there)
+    face = inner if cam["face"] == "inner" else outer
+    # the classifier's tile: that face, and its state until it speaks — off
+    # when ignored (a disc that fails before it is drawn as not run, by
+    # failed_at)
+    card["cls"] = {"circle": None if face is None else
+                   [round(face["center"][0], 1), round(face["center"][1], 1),
+                    round(_diameter(face["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
     why, m, stage = _judge(action, cam, outer, inner, box)
     if why:
         return verdict("fail", f"{cam['name']}: {why}", m, cam["ring"], stage)
     if threshold is None:
         action.ctx.runtime.step(f"{cam['cls']}: classifier ignored, pass")
         return verdict("pass", "", m, cam["ring"])
-    res = action.ctx.recipes[cam["cls"]].detect(
-        roi={"corners": box, "offset": CLS_ROI_OFFSET, "crop": True},
-        sim_return=[{"cls": "pass", "conf": 0.99}])
+    res = action.ctx.recipes[cam["cls"]].detect(roi=_face_roi(face), sim_return=[{"cls": "pass", "conf": 0.99}])
     if res is None:
         return None
     v = _verdict(res)
     action.ctx.runtime.step(
-        f"{cam['cls']}: roi +{CLS_ROI_OFFSET} px, pass {_pass_prob(res):.2f} vs "
-        f"{threshold:.2f} ({CLS_MODE}) -> {v}")
+        f"{cam['cls']}: the face, {_diameter(face['corners']) - 2 * FACE_MARGIN:.0f} px across, "
+        f"pass {_pass_prob(res):.2f} vs {threshold:.2f} ({CLS_MODE}) -> {v}")
     card["cls"].update(state=v, p=round(_pass_prob(res), 2), min=threshold)
     return verdict(v, "" if v == "pass" else f"{cam['name']}: classifier fail", m, cam["ring"],
                    None if v == "pass" else "classifier")
@@ -1170,7 +1190,7 @@ class Present(Action):
 
 class InspectBottom(Action):
     """Station camera: DETECT the held disc, check its RING (two circles,
-    concentric, whole), then CLASSIFY it on its box + CLS_ROI_OFFSET
+    concentric, whole), then CLASSIFY its masked face (_face_roi)
     (_inspect, STATION). A sensing action with two outcomes
     (bt-framework-guide §7): ``pass`` (default) and ``fail``; the fail's
     reason (``bottom camera: ring: off-centre 6.2 px`` …) and the ring's

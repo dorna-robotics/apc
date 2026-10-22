@@ -15,11 +15,13 @@ worst 10° sector showing enough of its outline, the run's
 `ring_coverage` sensitivity (a chip or a break pulls it down). The
 station camera also finds the band's inner edge, and the two must be
 concentric — the run's `ring_offset` sensitivity. Last, the classifier
-judges the disc on its box + `CLS_ROI_OFFSET` px, the square crop it was
-trained on (`vision/disc_cls.yaml`). Every disc's measured coverage, offset and
+judges the disc's masked face — a circle 10 px inside the band's inner
+edge (the disc's edge on the robot camera), grey outside — cut exactly as
+its training crops were (`vision/disc_cls.yaml`; until the face model
+is trained, run with the classifier on Ignore). Every disc's measured coverage, offset and
 edge ÷ box ratio are in the records sheet, and the pendant's **Last
 inspection** card shows the latest verdict on its own frame — the
-detector's box, the two circles, the edge's 36 sectors, the classifier's crop — the
+detector's box, the two circles, the edge's 36 sectors, the face the classifier sees — the
 frame held in memory by the runtime (`rt.asset`), never saved. How sure the classifier must
 be is the run's
 `classifier` setting on the setup screen: high (a pass needs 75 %),
@@ -107,7 +109,7 @@ tab.
 | `disc_od.yaml` | `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
 | `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, 10° coverage) | the station camera's circles: concentric, no chip |
 | `disc_ring_top.yaml` | — | `elp`, plain edges (no band on the anode) | the robot camera's circles: no chip |
-| `disc_cls.yaml` | `disc_pass_fail_cropped.pkl` | `cls` — pass / fail on the cropped disc, 448 px, int8 | the visual verdict, both cameras, last |
+| `disc_cls.yaml` | the face model (the old `disc_pass_fail_cropped.pkl` until it is trained) | `cls` — pass / fail on the masked face | the visual verdict, both cameras, last — drop the new weights here |
 
 `recipes.j2` registers six detections — `bottom_od` / `bottom_ring` /
 `bottom_cls` on the station camera, `top_od` / `top_ring` / `top_cls`
