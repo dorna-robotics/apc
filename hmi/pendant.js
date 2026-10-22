@@ -151,6 +151,17 @@ const CSS = `
   overflow:hidden; text-overflow:ellipsis; font-size:12.5px; font-weight:600; line-height:1; padding:6px 10px;
   border-radius:999px; background:rgba(0,0,0,.62); color:#fff; backdrop-filter:blur(6px); }
 .insp .tag b { font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:700; }
+/* a tile whose check never ran: no picture — a quiet hatched panel, the
+   tile's own outline, where the disc stopped */
+.insp .frame.ph { background:var(--surface2);
+  background-image:repeating-linear-gradient(135deg, transparent 0 11px, rgba(127,127,127,.07) 11px 22px);
+  box-shadow:inset 0 0 0 1.5px var(--border); }
+.insp .ph-in { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:6px; color:var(--muted); text-align:center; }
+.insp .ph-in svg { width:56px; height:56px; fill:none; stroke:currentColor; stroke-width:1.6; opacity:.55;
+  margin-bottom:4px; }
+.insp .ph-in b { font-size:var(--text-md); font-weight:600; color:var(--text); opacity:.6; }
+.insp .ph-in span { font-size:var(--text-sm); }
 .insp .cap { display:flex; align-items:center; gap:var(--space-2); margin-top:var(--space-2);
   font-size:var(--text-md); font-weight:600; }
 .insp .cap .n { width:20px; height:20px; border-radius:50%; background:var(--surface2); flex:none;
@@ -459,10 +470,24 @@ function inspectionHtml(c) {
         stroke-width="${1.6 * sw}" stroke-dasharray="${6 * sw} ${5 * sw}"/>` : `<rect width="${W}" height="${H}" fill="#8e8e93"/>`);
   const cov = num(c.coverage), off = num(c.offset), offMax = num(c.off_max);
   const fs = c.face ? c.face.state : null;
+  // Where the disc stopped (actions.py ``failed_at``): the checks run
+  // detector → disc edge → chip → concentric → face, the first that fails
+  // decides, and every tile after the one it failed at never ran. The
+  // concentric check is tile 2's, but it runs after the chip — so a chip
+  // stops the face, and leaves tile 2 with its circles but no verdict on
+  // the centres.
+  const at = c.failed_at || null;
+  const ran = { 2: at !== "detector", 3: !["detector", "circles"].includes(at),
+                4: at == null || at === "face" };
   const tile = (n, title, body, tag, st) => `<div class="tile"><div class="frame">${body}
       ${tag ? `<div class="tag">${tag}</div>` : ""}</div>
     <div class="cap"><span class="n">${n}</span>${title}<span class="st ${st[0]}">${st[1]}</span></div></div>`;
-  const dash = ["off", "—"];
+  // A tile whose check never ran: no picture — a quiet hatched panel, the
+  // tile's own outline, and where the disc stopped.
+  const stoppedAt = { detector: "Detector", circles: "Circles", chip: "Chip", concentric: "Circles", face: "Face" }[at] || "";
+  const idle = (n, title) => `<div class="tile"><div class="frame ph"><div class="ph-in">${PH_ICON[n]}
+      <b>Not run</b><span>Stopped at ${esc(stoppedAt)}</span></div></div>
+    <div class="cap"><span class="n">${n}</span>${title}<span class="st off">not run</span></div></div>`;
   return `<div class="card insp">
     <div class="ihead"><h3>Last inspection</h3>
       <span class="who">${esc(cap(c.cam))} · disc ${esc(c.disc)}</span><span class="grow"></span>
@@ -471,22 +496,33 @@ function inspectionHtml(c) {
     <div class="tiles">
       ${tile(1, "Detector", t1, det ? `disc <b>${det.conf.toFixed(2)}</b>` : "no disc",
              det ? ["ok", "found"] : ["bad", "none"])}
-      ${tile(2, "Circles", t2,
-             !det ? "" : !o ? "no circle the disc's size" :
-             off != null ? `offset <b>${off.toFixed(1)}</b> px · max ${offMax}` :
-             c.band ? "no inner circle" : `edge <b>${Math.round(o[2] * 2)}</b> px · no band`,
-             !det ? dash : !o ? ["bad", "none"] : off != null ? (off <= offMax ? ["ok", "concentric"] : ["bad", "off-centre"])
-             : c.band ? ["bad", "no inner"] : ["off", "edge only"])}
-      ${tile(3, "Chip", t3, cov != null ? `coverage <b>${cov.toFixed(2)}</b> · min ${covMin.toFixed(2)}` : "",
-             cov == null ? dash : cov >= covMin ? ["ok", "whole"] : ["bad", "chip"])}
-      ${tile(4, "Face", t4, !fs ? "" : fs === "off" ? "classifier off" : fs === "skipped" ? "not run — failed before it"
-             : `classifier <b>${esc(fs)}</b> · ${num(c.face.p).toFixed(2)}`,
-             !fs ? dash : fs === "off" ? ["off", "off"] : fs === "skipped" ? ["off", "not run"]
-             : fs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
+      ${!ran[2] ? idle(2, "Circles") : tile(2, "Circles", t2,
+             !o ? "no circle the disc's size"
+             : off != null ? `offset <b>${off.toFixed(1)}</b> px · max ${offMax}`
+             : !c.band ? `edge <b>${Math.round(o[2] * 2)}</b> px · no band`
+             : at === "chip" ? `edge <b>${Math.round(o[2] * 2)}</b> px · centres not checked`
+             : "no inner circle",
+             !o ? ["bad", "none"]
+             : off != null ? (off <= offMax ? ["ok", "concentric"] : ["bad", "off-centre"])
+             : !c.band ? ["off", "edge only"]
+             : at === "chip" ? ["off", "not checked"] : ["bad", "no inner"])}
+      ${!ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `coverage <b>${cov.toFixed(2)}</b> · min ${covMin.toFixed(2)}`,
+             cov >= covMin ? ["ok", "whole"] : ["bad", "chip"])}
+      ${!ran[4] ? idle(4, "Face") : tile(4, "Face", t4,
+             fs === "off" ? "classifier off" : `classifier <b>${esc(fs)}</b> · ${num(c.face.p).toFixed(2)}`,
+             fs === "off" ? ["off", "off"] : fs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
     </div></div>`;
 }
 
 const cap = s => { const t = String(s || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
+
+// A not-run tile's outline — what that tile would have drawn: the box,
+// the two circles, the sectored edge, the face.
+const PH_ICON = {
+  2: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17"/><circle cx="24" cy="24" r="12.5"/></svg>`,
+  3: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17" stroke-dasharray="7.5 3.2"/></svg>`,
+  4: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="15" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="2.5"/></svg>`,
+};
 
 // The card's element for these values — rebuilt only when the inspection
 // changed, so its picture does not reload on every redraw.

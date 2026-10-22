@@ -490,8 +490,10 @@ def _circles(action, cam, box):
 
 
 def _judge(action, cam, outer, inner, box):
-    """A camera's verdict on its circles: "" when they pass, else what
-    failed it; and the measurements for the records sheet. The first that
+    """A camera's verdict on its circles: ``(why, m, stage)`` — why "" when
+    they pass, else what failed it; m the measurements for the records
+    sheet; stage the check that failed (circles / chip / concentric, None
+    on a pass) — the inspection card's last tile that ran. The first that
     fails decides:
       1. the disc's edge found (a circle the disc's size)
       2. the edge whole — its worst 10° sector at least RING_COVERAGE_MIN.
@@ -500,27 +502,27 @@ def _judge(action, cam, outer, inner, box):
       3. (band cameras) the band's inner edge found, and the two centres
          at most RING_OFFSET_PX apart — concentric"""
     if outer is None:
-        return "ring: no circle the disc's size", {}
+        return "ring: no circle the disc's size", {}, "circles"
     m = {"ring_box_ratio": round(_diameter(outer["corners"]) / _diameter(box), 3),
          "ring_coverage": round(outer.get("conf", 1), 3)}
     say = (f"ring: edge {_diameter(outer['corners']):.0f} px, coverage {m['ring_coverage']:.2f} "
            f"(min {RING_COVERAGE_MIN:g}, {RING_COVERAGE_MODE})")
     if m["ring_coverage"] < RING_COVERAGE_MIN:
         action.ctx.runtime.step(say)
-        return f"ring: chip, coverage {m['ring_coverage']:.2f}", m
+        return f"ring: chip, coverage {m['ring_coverage']:.2f}", m, "chip"
     if not cam["band"]:
         action.ctx.runtime.step(say)
-        return "", m
+        return "", m, None
     if inner is None:
         action.ctx.runtime.step(say)
-        return "ring: no inner circle", m
+        return "ring: no inner circle", m, "concentric"
     offset = math.dist(outer["center"], inner["center"])
     m["ring_offset_px"] = round(offset, 1)
     action.ctx.runtime.step(f"{say}, inner {_diameter(inner['corners']):.0f} px, offset {offset:.1f} px "
                             f"(max {RING_OFFSET_PX:g}, {RING_OFFSET_MODE})")
     if offset > RING_OFFSET_PX:
-        return f"ring: off-centre {offset:.1f} px", m
-    return "", m
+        return f"ring: off-centre {offset:.1f} px", m, "concentric"
+    return "", m, None
 
 
 def _face_roi(circle):
@@ -604,17 +606,20 @@ def _inspect(action, cam, disc):
     card = {"cam": cam["name"], "disc": disc + 1, "band": cam["band"],
             "cov_min": RING_COVERAGE_MIN, "off_max": RING_OFFSET_PX if cam["band"] else None}
 
-    def verdict(v, why, m, alias, **more):
-        _CARD.post(action.ctx, alias, dict(card, verdict=v, why=why,
+    def verdict(v, why, m, alias, failed_at=None):
+        # failed_at: the check the disc stopped at (detector / circles /
+        # chip / concentric / face) — the card draws the tiles after it as
+        # not run
+        _CARD.post(action.ctx, alias, dict(card, verdict=v, why=why, failed_at=failed_at,
                                            coverage=m.get("ring_coverage"),
-                                           offset=m.get("ring_offset_px"), **more))
+                                           offset=m.get("ring_offset_px")))
         return v, why, m
 
     best = _detect(action, cam["od"])
     if best is None:
         return None
     if not best:
-        return verdict("empty", f"{cam['name']}: no disc", {}, cam["od"])
+        return verdict("empty", f"{cam['name']}: no disc", {}, cam["od"], "detector")
     box = best["corners"]
     xs = [c[0] for c in box]; ys = [c[1] for c in box]
     card["det"] = {"conf": round(best.get("conf", 0), 2), "box": [min(xs), min(ys), max(xs), max(ys)]}
@@ -628,14 +633,13 @@ def _inspect(action, cam, disc):
     face = _face_roi(fc)
     threshold = CLS_MODES[CLS_MODE]
     classifies = FACE_CHECK and threshold is not None
-    # the face tile's state until the classifier speaks: off, or skipped
-    # when a check before it fails the disc
+    # the face tile's state until the classifier speaks — off (a disc that
+    # fails before it is drawn as not run, by failed_at)
     card["face"] = {"circle": [round(fc["center"][0], 1), round(fc["center"][1], 1),
-                               round(_diameter(fc["corners"]) / 2 - FACE_MARGIN, 1)],
-                    "state": "skipped" if classifies else "off"}
-    why, m = _judge(action, cam, outer, inner, box)
+                               round(_diameter(fc["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
+    why, m, stage = _judge(action, cam, outer, inner, box)
     if why:
-        return verdict("fail", f"{cam['name']}: {why}", m, cam["ring"])
+        return verdict("fail", f"{cam['name']}: {why}", m, cam["ring"], stage)
     if not classifies:
         return verdict("pass", "", m, cam["ring"])
     res = action.ctx.recipes[cam["face"]].detect(roi=face, sim_return=[{"cls": "pass", "conf": 0.99}])
@@ -645,7 +649,8 @@ def _inspect(action, cam, disc):
     action.ctx.runtime.step(
         f"{cam['face']}: pass {_pass_prob(res):.2f} vs {threshold:.2f} ({CLS_MODE}) -> {v}")
     card["face"].update(state=v, p=round(_pass_prob(res), 2))
-    return verdict(v, "" if v == "pass" else f"{cam['name']}: face fail", m, cam["ring"])
+    return verdict(v, "" if v == "pass" else f"{cam['name']}: face fail", m, cam["ring"],
+                   None if v == "pass" else "face")
 
 
 # ── IN inventory ──────────────────────────────────────────────────────
