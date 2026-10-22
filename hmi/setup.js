@@ -59,6 +59,22 @@ const CLS_MODES = [
   { key: "medium", label: "Medium", hint: "a pass needs 50 % — the model's own call" },
   { key: "high",   label: "High",   hint: "a pass needs 75 % — catches the most" },
 ];
+// The ring's two sensitivities — the ``ring_coverage`` / ``ring_offset``
+// kwargs. Mirror COVERAGE_MODES / OFFSET_MODES in actions.py and say the
+// number; left to right, least to most strict, as the classifier's.
+const COVERAGE_MODES = [
+  { key: "low",    label: "Low",    hint: "the edge must show 30 % in its worst 10° — lets small chips through" },
+  { key: "medium", label: "Medium", hint: "the edge must show 50 % in its worst 10° — good discs measured 70–100 %, chips 0–36 %" },
+  { key: "high",   label: "High",   hint: "the edge must show 70 % in its worst 10° — a nick in the band can fail a good disc" },
+];
+const OFFSET_MODES = [
+  { key: "low",    label: "Low",    hint: "the band's two centres at most 12 px apart" },
+  { key: "medium", label: "Medium", hint: "at most 8 px apart — good discs measured 1.4–4.5 px" },
+  { key: "high",   label: "High",   hint: "at most 5 px apart — close to a good disc's 4.5 px" },
+];
+// A sensitivity from a saved value — medium for anything not offered.
+const pick = (v, modes) => (modes.some(m => m.key === String(v).toLowerCase()) ? String(v).toLowerCase() : "medium");
+
 // What a FULL position is written as: the stack size — ``stack_size`` in
 // hmi/default.j2, THE one place that number lives (actions.py reads the
 // same key into MAX_PER_SLOT). Read from the schema into st.full at
@@ -258,7 +274,12 @@ function initial(api, key, fallback) {
 // sent). The checks are bench confirmations: never restored, never saved.
 export function benchState(api) {
   const st = { in: {}, step: "bench", checks: {}, classifier: "medium",
-               full: Number(initial(api, "stack_size", 0)) || 0 };
+               full: Number(initial(api, "stack_size", 0)) || 0,
+               // the ring's two sensitivities and the face classifier's
+               // switch (hmi/default.j2)
+               ring_coverage: pick(initial(api, "ring_coverage", "medium"), COVERAGE_MODES),
+               ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES),
+               face_check: [true, "true", 1, "1"].includes(initial(api, "face_check", false)) };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
   const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
   if (CLS_MODES.some(m => m.key === c)) st.classifier = c;
@@ -371,7 +392,7 @@ function stepBar(st, V) {
   // final check is ticked.
   const STEPS = [
     { key: "bench",      title: "Bench",        ok: !V.errs.length },
-    { key: "classifier", title: "Classifier",   ok: true },
+    { key: "classifier", title: "Inspection",   ok: true },
     { key: "check",      title: "Final checks", ok: checksOk(st) },
   ];
   const k = STEPS.findIndex(x => x.key === st.step);
@@ -412,6 +433,33 @@ function bodyHtml(st) {
           `<button type="button" class="pos${st.classifier === m.key ? " armed" : ""}" data-cls="${m.key}">${esc(m.label)}</button>`).join("")}
         </div>
         <div class="hint">${esc((CLS_MODES.find(m => m.key === st.classifier) || CLS_MODES.find(m => m.key === "medium")).hint)}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Chip sensitivity — how whole the disc's edge must be, both cameras</h4>
+      <div class="inner">
+        <div class="row seg">${COVERAGE_MODES.map(m =>
+          `<button type="button" class="pos${st.ring_coverage === m.key ? " armed" : ""}" data-ring="ring_coverage" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
+        </div>
+        <div class="hint">${esc(COVERAGE_MODES.find(m => m.key === st.ring_coverage).hint)}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Concentric sensitivity — the yellow band, station camera</h4>
+      <div class="inner">
+        <div class="row seg">${OFFSET_MODES.map(m =>
+          `<button type="button" class="pos${st.ring_offset === m.key ? " armed" : ""}" data-ring="ring_offset" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
+        </div>
+        <div class="hint">${esc(OFFSET_MODES.find(m => m.key === st.ring_offset).hint)}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Face classifier — the bare face, both cameras</h4>
+      <div class="checks">
+        <label class="check${st.face_check ? " on" : ""}">
+          <input type="checkbox" data-face${st.face_check ? " checked" : ""}>
+          <span>Classify the face <span class="muted">— judged by the sensitivity above; off until the face model is trained</span></span>
+        </label>
       </div>
     </div>
   </div>`;
@@ -485,6 +533,19 @@ function render(wrap, st) {
       render(wrap, st);
     };
   });
+  wrap.querySelectorAll("[data-ring]").forEach(b => {
+    b.onclick = () => {
+      if (frozen()) return;
+      st[b.dataset.ring] = b.dataset.v;
+      render(wrap, st);
+    };
+  });
+  const face = wrap.querySelector("[data-face]");
+  if (face) face.onchange = () => {
+    if (frozen()) { face.checked = st.face_check; return; }
+    st.face_check = face.checked;
+    face.closest(".check").classList.toggle("on", face.checked);
+  };
   const allfull = q("#allfull");
   if (allfull) allfull.onclick = () => {
     if (frozen()) return;
@@ -543,6 +604,9 @@ export default {
       in_1: _st.in.in_1.map(f => (f ? _st.full : 0)),
       in_2: _st.in.in_2.map(f => (f ? _st.full : 0)),
       classifier: _st.classifier,
+      ring_coverage: _st.ring_coverage,
+      ring_offset: _st.ring_offset,
+      face_check: !!_st.face_check,
     };
   },
 

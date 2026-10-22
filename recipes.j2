@@ -6,7 +6,8 @@
 {%- set hmp = "[true, smove]" -%}
 {#- Every detection's settings live in vision/ (beside this file), one
     config per model with the model beside it: vision/disc_od.yaml,
-    vision/disc_cls.yaml. A relative path is relative to the file it is
+    vision/disc_ring.yaml, vision/disc_ring_top.yaml, vision/disc_face.yaml.
+    A relative path is relative to the file it is
     written in — config: to this file, the paths inside a config to
     vision/. -#}
 
@@ -59,8 +60,12 @@ disc_out_bad_1:
 # one named detection on the same camera (Inspector.detection_name):
 #   *      — the disc DETECTOR (od). Owns the motion too: present() on
 #            the station form. Runs on the WHOLE frame — no ROI.
-#   *_cls  — the pass/fail CLASSIFIER (cls). Never moves; actions.py runs
-#            it on the detector's box grown by CLS_ROI_OFFSET px, cropped.
+#   *_ring — the disc's CIRCLES (elp) on the detector's box grown by
+#            CLS_ROI_OFFSET px, cropped: the station camera's judge the
+#            disc (concentric, no chip); the robot camera's only place the
+#            face crop.
+#   *_face — the pass/fail CLASSIFIER (cls) on the bare face inside them.
+#            Never moves.
 # The station pair share the station's solved pose (same ref_joints — the
 # IK cache answers the second one).
 # Every detection setting (model, conf, frames_avg, display) is in its
@@ -71,9 +76,15 @@ inspector:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_od, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {config: vision/disc_od.yaml}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
-inspector_cls:
+# The ring's two circles (vision/disc_ring.yaml) and the face classifier
+# (vision/disc_face.yaml) — the station's checks after the detector.
+inspector_ring:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_cls, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {config: vision/disc_cls.yaml}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_ring, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {config: vision/disc_ring.yaml}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
+
+inspector_face:
+  class: workspace.recipes.inspector.Inspector
+  kwargs: {component: inspection_poe_vertical_1, detection_name: bottom_face, ref_joints: [-48.9, 27.3, -117.3, -0.9, 0.0, 132.0, -9.0, 0.0], base_distance: 195, rail_step: 5, rail_span: 0, detection_preset: {config: vision/disc_face.yaml}, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # Robot camera — inspection_poe_robot_1, the PoE camera riding the arm
 # (a component like any station, no motion surface): the disc ON the
@@ -82,9 +93,15 @@ inspector_robot:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_robot_1, detection_name: top_od, detection_preset: {config: vision/disc_od.yaml}, speed_factor: {{ sf }}}
 
-inspector_robot_cls:
+# Its circles (vision/disc_ring_top.yaml — no band here, plain edges) and
+# the face classifier (vision/disc_face.yaml, the station's own config).
+inspector_robot_ring:
   class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_poe_robot_1, detection_name: top_cls, detection_preset: {config: vision/disc_cls.yaml}, speed_factor: {{ sf }}}
+  kwargs: {component: inspection_poe_robot_1, detection_name: top_ring, detection_preset: {config: vision/disc_ring_top.yaml}, speed_factor: {{ sf }}}
+
+inspector_robot_face:
+  class: workspace.recipes.inspector.Inspector
+  kwargs: {component: inspection_poe_robot_1, detection_name: top_face, detection_preset: {config: vision/disc_face.yaml}, speed_factor: {{ sf }}}
 
 # Anode — plain base Recipe: pick/place the disc on the anode's "place"
 # anchor. Everything is explicit here — no station class inherited.

@@ -7,13 +7,22 @@ BK 879B, then dropped into a PASS or FAIL holder by the window in
 `Sort` (`C_MIN..C_MAX`, `actions.py`). A FLAT BT project: one disc
 through the bench at a time, `ROUTE` at the bottom of `actions.py`.
 
-Each inspection is two models on one camera: the detector finds the
-disc, the classifier judges the crop around its box (`CLS_ROI_OFFSET`
-px of margin). How sure the classifier must be is the run's
+Both cameras run one flow (`_inspect`): the detector finds the disc;
+the disc's edge is found on its box (`vision/disc_ring.yaml` on the
+station camera, through the yellow band; `vision/disc_ring_top.yaml` on
+the robot camera, plain edges — no band there) and must be whole: its
+worst 10° sector showing enough of its outline, the run's
+`ring_coverage` sensitivity (a chip or a break pulls it down). The
+station camera also finds the band's inner edge, and the two must be
+concentric — the run's `ring_offset` sensitivity. With the run's
+`face_check` on, a classifier then judges the bare face inside them
+(`vision/disc_face.yaml`). Every disc's measured coverage, offset and
+edge ÷ box ratio are in the records sheet. How sure the classifier must
+be is the run's
 `classifier` setting on the setup screen: high (a pass needs 75 %),
 medium (50 %, the model's own call), low (25 %), or ignore (no
 classifier at all — the detector still has to see a disc, the
-capacitance reading alone sorts). A classifier fail at either camera sends the disc to
+capacitance reading alone sorts). A fail at either camera sends the disc to
 the fail column with no measurement. A disc the detector does not see
 at either camera is a fail too: the suction is never released mid-way,
 the hand goes to the fail column as if it held one.
@@ -85,19 +94,22 @@ the project like the CAD: they are bench assets, not operator uploads.
 A config's paths resolve against `vision/` itself (vision-guide §5
 "Config files"): the model beside it, the pictures in
 `../captures/<config name>/` (`display.client_save_*`, written on this
-machine, one file per run per detection — OFF for now, every save key
-false; `label: 1` only draws on the live view); a key for a vlm config
+machine, one file per run per detection — only `disc_face` keeps one,
+the bare face crop, the face model's training data; `label: 1` only
+draws on the live view); a key for a vlm config
 goes beside it as `*.key`, git-ignored. `vision/` is not a file-browser
 tab.
 
 | config | model | type | for |
 |---|---|---|---|
 | `disc_od.yaml` | `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
-| `disc_cls.yaml` | `disc_pass_fail_cropped.pkl` | `cls` — pass / fail on the cropped disc, 448 px, int8 | the visual verdict |
+| `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, 10° coverage) | the station camera's circles: concentric, no chip |
+| `disc_ring_top.yaml` | — | `elp`, plain edges (no band on the anode) | the robot camera's circles — only to place the face crop |
+| `disc_face.yaml` | `disc_pass_fail_cropped.pkl` for now | `cls` — pass / fail on the bare face | the face verdict, both cameras, when `face_check` is on; the face model replaces the path |
 
-`recipes.j2` registers four detections — `bottom_od` / `bottom_cls` on
-the station camera, `top_od` / `top_cls` on the robot camera — one
-Inspector recipe each. Each detection is
+`recipes.j2` registers six detections — `bottom_od` / `bottom_ring` /
+`bottom_face` on the station camera, `top_od` / `top_ring` / `top_face`
+on the robot camera — one Inspector recipe each. Each detection is
 `detection_preset: {config: vision/disc_od.yaml}` — a relative path is
 relative to the file it is written in: `config:` to recipes.j2, the
 paths inside the config to `vision/`; the client ships the model's bytes to the vision unit at

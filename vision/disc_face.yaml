@@ -1,0 +1,21 @@
+# The disc's FACE CLASSIFIER — recipes.j2 inspector_face (bottom_face,
+# station camera) and inspector_robot_face (top_face, robot camera), run
+# on the bare face: a circle FACE_MARGIN px inside the band's inner circle
+# (the disc's edge on the robot camera), grey outside, cropped (actions.py
+# _face_roi). On only when the run's face_check is ticked.
+# The model is the whole-disc classifier for now, so the step runs; swap
+# in the face model (trained on these crops) by changing ``path`` here —
+# nothing else names it. The bare crop the model saw is kept in
+# ../captures/disc_face/ (roi_<timestamp>.jpg): the face model's data.
+detection:
+  cmd: cls
+  path: disc_pass_fail_cropped.pkl
+  conf: 0.5
+  top_k: 1
+frames_avg: 1
+display:
+  label: 1
+  save_img: false
+  save_img_roi: false
+  client_save_img: false
+  client_save_img_roi: "../captures/disc_face/"      # the bare face crop, nothing drawn

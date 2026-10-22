@@ -1,0 +1,28 @@
+# The disc's RING — recipes.j2 inspector_ring (bottom_ring, station
+# camera), run on the detector's box grown by CLS_ROI_OFFSET px, cropped.
+# The yellow band's two circles, classic, no model (workspace
+# docs/vision-guide.md §5 "A ring's two circles"):
+#   color   keeps only coloured pixels — the band; the grey disc and the
+#           background drop out (band S ~114, the rest <= 44)
+#   elp     fits the band's outer and inner circle; false-alarm validation
+#           off — it rejects big, clean circles at full size
+#   conf    each circle's worst 10° sector's share of its outline the
+#           image shows — a chip pulls its sector down
+# actions.py judges them: the outer one against the detector's box, its
+# conf against the run's ring_coverage, the two centres against its
+# ring_offset (COVERAGE_MODES / OFFSET_MODES).
+detection:
+  cmd: elp
+  nfa_validation: false
+  sector_deg: 10
+color:
+  low_hsv: [0, 70, 0]
+  high_hsv: [255, 255, 255]
+  inv: 0
+frames_avg: 1
+display:
+  label: 1              # class + conf drawn on the frame
+  save_img: false
+  save_img_roi: false
+  client_save_img: false
+  client_save_img_roi: false
