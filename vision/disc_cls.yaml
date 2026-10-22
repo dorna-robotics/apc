@@ -5,8 +5,8 @@
 # path here is relative to THIS folder (vision/): the model beside it,
 # the pictures in ../captures/disc_cls/. Nothing is kept on the vision
 # unit (save_img / save_img_roi false); client_save_* write on THIS
-# machine, one file per run per detection (vision-guide §5) — OFF for
-# now (false); to save again, point them at "../captures/disc_cls/".
+# machine, one file per run per detection (vision-guide §5): the bare
+# crop is kept (client_save_img_roi), the annotated frame is not.
 detection:
   cmd: cls
   path: disc_pass_fail_cropped.pkl
@@ -21,4 +21,4 @@ display:
   save_img: false
   save_img_roi: false
   client_save_img: false          # off for now — "../captures/disc_cls/" to keep the annotated frame
-  client_save_img_roi: false      # off for now — "../captures/disc_cls/" to keep the bare crop the model saw
+  client_save_img_roi: "../captures/disc_cls/"      # the bare crop the model saw, nothing drawn — roi_<timestamp>.jpg
