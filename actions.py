@@ -128,6 +128,7 @@ from __future__ import annotations
 
 import math
 import os
+import threading
 
 from workspace.bt import Action, predicate
 
@@ -398,9 +399,10 @@ def _anode_seen(action, sim_return=[]):
 def _detect(action, od_alias):
     """The detector (``od_alias``) on the WHOLE fresh frame — an explicit
     empty ROI, so nothing set on the detection earlier narrows it. Returns
-    its best box (four full-frame corners), ``[]`` when it finds no disc,
-    ``None`` when the read failed. The box is in the run log: if a later
-    crop on the vision unit does not match it, the fault is downstream."""
+    its best result (``corners`` four full-frame corners, ``conf``), ``{}``
+    when it finds no disc, ``None`` when the read failed. The box is in the
+    run log: if a later crop on the vision unit does not match it, the
+    fault is downstream."""
     rcp = action.ctx.recipes
     found = rcp[od_alias].detect(
         roi={"corners": [], "crop": False},
@@ -409,7 +411,7 @@ def _detect(action, od_alias):
     if found is None:
         return None
     if not found:
-        return []
+        return {}
     best = max(found, key=lambda r: r.get("conf", 0))
     box = best["corners"]
     xs = [c[0] for c in box]; ys = [c[1] for c in box]
@@ -417,7 +419,7 @@ def _detect(action, od_alias):
         f"{od_alias}: {len(found)} found, best {best.get('conf', 0):.2f} at "
         f"x {min(xs):.0f}..{max(xs):.0f} y {min(ys):.0f}..{max(ys):.0f} "
         f"({max(xs) - min(xs):.0f}x{max(ys) - min(ys):.0f} px)")
-    return box
+    return best
 
 
 # The two cameras, one flow (_inspect): the detector, the circles on its
@@ -530,7 +532,65 @@ def _face_roi(circle):
             "crop": True}
 
 
-def _inspect(action, cam):
+# ── The inspection card (the pendant's "Last inspection") ─────────────
+# Every inspection's verdict, drawn on its own frame: the detector's box,
+# the disc's two circles, the edge's 36 sectors, the face crop. rt.op
+# carries the numbers (``inspection``); the frame is an rt.asset — held in
+# memory, never on disk — the pendant loads by URL. Fetching the frame is
+# observability, so it never holds the robot (project-guide §8): a worker
+# thread does it after the verdict, the LATEST inspection only (one
+# waiting is replaced by a newer one); a failure costs the picture, never
+# the run. CARD_SIDE: the frame's long edge as the vision unit downscales
+# it — the disc stays ~450 px across, plenty for a card.
+CARD_SIDE = 1280
+
+
+def _circle(c):
+    """[cx, cy, r] in frame px of a circle result (center + box corners)."""
+    return None if c is None else [round(c["center"][0], 1), round(c["center"][1], 1),
+                                    round(_diameter(c["corners"]) / 2, 1)]
+
+
+class _CardWorker:
+    """Publishes the latest inspection card off the action's thread:
+    fetch the frame (the ``alias`` detection's last ``color_img``, nothing
+    drawn), hold it as the ``inspection`` asset, then rt.op the card with
+    the asset's path and the frame's size."""
+
+    def __init__(self):
+        self._cv = threading.Condition()
+        self._job = None
+        self._thread = None
+
+    def post(self, ctx, alias, card):
+        with self._cv:
+            self._job = (ctx, alias, card)
+            self._cv.notify()
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._run, name="apc-inspection-card", daemon=True)
+                self._thread.start()
+
+    def _run(self):
+        while True:
+            with self._cv:
+                while self._job is None:
+                    self._cv.wait()
+                (ctx, alias, card), self._job = self._job, None
+            try:
+                data, meta = ctx.recipes[alias].get_img(kind="color_img", quality=80,
+                                                        max_side=CARD_SIDE, meta=True)
+                shape = (meta or {}).get("source_shape")
+                if data and shape:
+                    card = dict(card, img=ctx.runtime.asset("inspection", data), w=shape[1], h=shape[0])
+                ctx.runtime.op(inspection=card)
+            except Exception as ex:
+                print(f"[inspection card] dropped: {type(ex).__name__}: {ex}")
+
+
+_CARD = _CardWorker()
+
+
+def _inspect(action, cam, disc):
     """One camera's check (STATION / ROBOT): the detector; the circles on
     its box (_circles), JUDGED on the station camera (_judge); then — when
     the run's face_check is on and the classifier is not ignored — the
@@ -539,30 +599,53 @@ def _inspect(action, cam):
     the disc's size was found). Returns ``(v, why, m)``: v ``"pass"`` /
     ``"fail"`` / ``"empty"``, why the fail, m the ring's measurements — or
     None when a read failed (declarative retry: the caller returns False,
-    the operator recovers)."""
-    box = _detect(action, cam["od"])
-    if box is None:
+    the operator recovers). Every verdict also goes to the pendant's
+    inspection card (_CARD)."""
+    card = {"cam": cam["name"], "disc": disc + 1, "band": cam["band"],
+            "cov_min": RING_COVERAGE_MIN, "off_max": RING_OFFSET_PX if cam["band"] else None}
+
+    def verdict(v, why, m, alias, **more):
+        _CARD.post(action.ctx, alias, dict(card, verdict=v, why=why,
+                                           coverage=m.get("ring_coverage"),
+                                           offset=m.get("ring_offset_px"), **more))
+        return v, why, m
+
+    best = _detect(action, cam["od"])
+    if best is None:
         return None
-    if not box:
-        return "empty", f"{cam['name']}: no disc", {}
+    if not best:
+        return verdict("empty", f"{cam['name']}: no disc", {}, cam["od"])
+    box = best["corners"]
+    xs = [c[0] for c in box]; ys = [c[1] for c in box]
+    card["det"] = {"conf": round(best.get("conf", 0), 2), "box": [min(xs), min(ys), max(xs), max(ys)]}
     circles = _circles(action, cam, box)
     if circles is None:
         return None
     outer, inner = circles
+    card.update(outer=_circle(outer), inner=_circle(inner),
+                sectors=outer.get("sectors") if outer else None)
+    fc = inner or outer or _box_circle(box)             # what the face is cut inside
+    face = _face_roi(fc)
+    threshold = CLS_MODES[CLS_MODE]
+    classifies = FACE_CHECK and threshold is not None
+    # the face tile's state until the classifier speaks: off, or skipped
+    # when a check before it fails the disc
+    card["face"] = {"circle": [round(fc["center"][0], 1), round(fc["center"][1], 1),
+                               round(_diameter(fc["corners"]) / 2 - FACE_MARGIN, 1)],
+                    "state": "skipped" if classifies else "off"}
     why, m = _judge(action, cam, outer, inner, box)
     if why:
-        return "fail", f"{cam['name']}: {why}", m
-    threshold = CLS_MODES[CLS_MODE]
-    if not FACE_CHECK or threshold is None:
-        return "pass", "", m
-    res = action.ctx.recipes[cam["face"]].detect(
-        roi=_face_roi(inner or outer or _box_circle(box)), sim_return=[{"cls": "pass", "conf": 0.99}])
+        return verdict("fail", f"{cam['name']}: {why}", m, cam["ring"])
+    if not classifies:
+        return verdict("pass", "", m, cam["ring"])
+    res = action.ctx.recipes[cam["face"]].detect(roi=face, sim_return=[{"cls": "pass", "conf": 0.99}])
     if res is None:
         return None
     v = _verdict(res)
     action.ctx.runtime.step(
         f"{cam['face']}: pass {_pass_prob(res):.2f} vs {threshold:.2f} ({CLS_MODE}) -> {v}")
-    return (v, "" if v == "pass" else f"{cam['name']}: face fail", m)
+    card["face"].update(state=v, p=round(_pass_prob(res), 2))
+    return verdict(v, "" if v == "pass" else f"{cam['name']}: face fail", m, cam["ring"])
 
 
 # ── IN inventory ──────────────────────────────────────────────────────
@@ -1136,7 +1219,7 @@ class InspectBottom(Action):
         rt.step(f"disc {disc + 1}: inspect bottom")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — inspecting")
-        r = _inspect(self, STATION)
+        r = _inspect(self, STATION, disc)
         if r is None:
             rt.count("inspect.bottom", read_failed=1)
             rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
@@ -1244,7 +1327,7 @@ class InspectTop(Action):
         rt.step(f"disc {disc + 1}: inspect top")
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — inspecting on the anode")
-        r = _inspect(self, ROBOT)
+        r = _inspect(self, ROBOT, disc)
         if r is None:
             rt.count("inspect.top", read_failed=1)
             rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")

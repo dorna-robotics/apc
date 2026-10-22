@@ -17,7 +17,10 @@ station camera also finds the band's inner edge, and the two must be
 concentric — the run's `ring_offset` sensitivity. With the run's
 `face_check` on, a classifier then judges the bare face inside them
 (`vision/disc_face.yaml`). Every disc's measured coverage, offset and
-edge ÷ box ratio are in the records sheet. How sure the classifier must
+edge ÷ box ratio are in the records sheet, and the pendant's **Last
+inspection** card shows the latest verdict on its own frame — the
+detector's box, the two circles, the edge's 36 sectors, the face — the
+frame held in memory by the runtime (`rt.asset`), never saved. How sure the classifier must
 be is the run's
 `classifier` setting on the setup screen: high (a pass needs 75 %),
 medium (50 %, the model's own call), low (25 %), or ignore (no
@@ -94,9 +97,8 @@ the project like the CAD: they are bench assets, not operator uploads.
 A config's paths resolve against `vision/` itself (vision-guide §5
 "Config files"): the model beside it, the pictures in
 `../captures/<config name>/` (`display.client_save_*`, written on this
-machine, one file per run per detection — only `disc_face` keeps one,
-the bare face crop, the face model's training data; `label: 1` only
-draws on the live view); a key for a vlm config
+machine, one file per run per detection — every save is OFF, no image
+is kept; `label: 1` only draws on the live view); a key for a vlm config
 goes beside it as `*.key`, git-ignored. `vision/` is not a file-browser
 tab.
 

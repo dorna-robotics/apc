@@ -5,8 +5,8 @@
 # _face_roi). On only when the run's face_check is ticked.
 # The model is the whole-disc classifier for now, so the step runs; swap
 # in the face model (trained on these crops) by changing ``path`` here —
-# nothing else names it. The bare crop the model saw is kept in
-# ../captures/disc_face/ (roi_<timestamp>.jpg): the face model's data.
+# nothing else names it. Nothing is saved; to collect the face model's
+# data, set client_save_img_roi to "../captures/disc_face/".
 detection:
   cmd: cls
   path: disc_pass_fail_cropped.pkl
@@ -18,4 +18,4 @@ display:
   save_img: false
   save_img_roi: false
   client_save_img: false
-  client_save_img_roi: "../captures/disc_face/"      # the bare face crop, nothing drawn
+  client_save_img_roi: false

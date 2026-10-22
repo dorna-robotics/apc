@@ -24,6 +24,13 @@
 //   last_disc    number of the disc last measured
 //   last_c       its capacitance           last_c_unit  the meter's unit
 //   last_result  "pass" | "fail"
+//   inspection   the LAST inspection, either camera (actions.py _inspect):
+//                {cam, disc, verdict, why, det {conf, box}, outer / inner
+//                [cx, cy, r], sectors [36], coverage, cov_min, offset,
+//                off_max, face {circle, state, p}, img, w, h} — img an
+//                rt.asset path (api.url makes it loadable), w × h the
+//                frame it is in; absent in sim. Drawn as the inspection
+//                card under the columns: four tiles over the one frame.
 //   notice       {level, title, text} | absent    the operator is needed
 //                (the anode blocked after MAX_BLOWS): a MODAL over the
 //                whole screen, the bench dimmed behind it. Its Dismiss
@@ -43,16 +50,24 @@
 // and the live position its ● glyph: colour never carries a state
 // alone, and a pendant is read across a room.
 //
-// TWO COLUMNS when the pane is wide enough, ONE when it is not (a
-// container query on the pane's width — the screen adapts to the window,
-// not the window to the screen): the bench on the left; on the right,
-// where the run is (the step in operator words, and the run as a ring)
-// over the last reading. The counts are in the wells. The frame's ACTIVE
+// THREE FULL-HEIGHT COLUMNS when the pane is wide enough, ONE when it is
+// not (a container query on the pane's width — the screen adapts to the
+// window, not the window to the screen), as bna's pendant: the bench;
+// where the run is (the step in operator words, and the run as a ring);
+// the last reading. Under them the inspection card, exactly their width. The counts are in the wells. The frame's ACTIVE
 // ROUTINE panel is switched off (``hero: false``): it would show the
 // same step a second time, in the log's words instead of these.
 //
 // This screen is READ-ONLY on purpose: stopping and pausing already live
 // on the platform's own control rail.
+//
+// THE INSPECTION CARD — the last verdict, drawn on its own frame: (1) the
+// detector's box, (2) the disc's two circles, (3) the edge's 36 sectors,
+// green whole / red missing, (4) the face the classifier sees. One
+// picture (an rt.asset, held in memory by the runtime), every mark and
+// label drawn here over it — sharp at any size, nothing burned into
+// pixels. The card is built once per inspection and its element reused
+// across the screen's redraws, so the picture never reloads on a tick.
 
 const SLOTS_N = 7;
 const SLOTS   = Array.from({ length: SLOTS_N }, (_, i) => `A${i + 1}`);
@@ -101,15 +116,47 @@ const CSS = `
    are; the stack centres in the pane on both axes */
 .stack { display:flex; flex-direction:column; gap:var(--space-5); width:fit-content;
   max-width:100%; margin:auto; }
-.cols { display:grid; grid-template-columns:auto minmax(240px, 300px); gap:var(--space-5);
-  align-items:start; justify-content:center; width:100%; }
+/* THREE FULL-HEIGHT COLUMNS — bench | run | last measurement — as bna's
+   pendant: every card stands the row's height, its title top-left at the
+   same line, its content from the top down. */
+.cols { display:grid; grid-template-columns:auto minmax(240px, 300px) minmax(240px, 300px);
+  gap:var(--space-5); align-items:stretch; justify-content:center; width:100%; }
 .col { display:flex; flex-direction:column; gap:var(--space-5); min-width:0; }
+.col > .card { flex:1 1 auto; }
 /* narrow pane: one column, the bench first */
-@container (max-width: 860px) {
+@container (max-width: 1000px) {
   .cols { grid-template-columns:minmax(0, 1fr); }
-  .col.side { flex-direction:row; flex-wrap:wrap; }
-  .col.side > .card { flex:1 1 240px; }
 }
+
+/* the inspection card: under the columns, EXACTLY as wide as they are —
+   width 0 so its four pictures never widen the stack (which sizes to
+   its content), min-width 100% so it then fills it */
+.insp { width:0; min-width:100%; align-items:stretch; gap:var(--space-4); }
+.insp .ihead { align-self:stretch; display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; }
+.insp .ihead h3 { margin:0; font-size:var(--text-xs); letter-spacing:.13em; text-transform:uppercase;
+  font-weight:700; opacity:.7; text-align:left; }
+.insp .tiles { align-self:stretch; }
+.insp .who { font-size:var(--text-md); color:var(--muted); }
+.insp .grow { flex:1; }
+.insp .why { font-size:var(--text-md); font-weight:600; color:var(--red); }
+.insp .vpill { font-size:var(--text-sm); font-weight:700; letter-spacing:.06em; padding:4px 14px;
+  border-radius:999px; color:#fff; background:var(--muted); }
+.insp .vpill.pass { background:var(--green); }
+.insp .vpill.fail, .insp .vpill.empty { background:var(--red); }
+.insp .tiles { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:var(--space-4); }
+@container (max-width: 860px) { .insp .tiles { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+.insp .frame { position:relative; aspect-ratio:1; border-radius:var(--radius-md); overflow:hidden; background:#1c1c1e; }
+.insp .frame svg { width:100%; height:100%; display:block; }
+.insp .tag { position:absolute; left:10px; bottom:10px; max-width:calc(100% - 20px); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; font-size:12.5px; font-weight:600; line-height:1; padding:6px 10px;
+  border-radius:999px; background:rgba(0,0,0,.62); color:#fff; backdrop-filter:blur(6px); }
+.insp .tag b { font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:700; }
+.insp .cap { display:flex; align-items:center; gap:var(--space-2); margin-top:var(--space-2);
+  font-size:var(--text-md); font-weight:600; }
+.insp .cap .n { width:20px; height:20px; border-radius:50%; background:var(--surface2); flex:none;
+  display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--muted); }
+.insp .cap .st { margin-left:auto; font-size:var(--text-xs); font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.insp .st.ok { color:var(--green); } .insp .st.bad { color:var(--red); } .insp .st.off { color:var(--muted); }
 
 /* the notice: the operator is needed — a modal over the whole screen.
    The host is the pane; the backdrop fills it and dims the bench, the
@@ -147,12 +194,13 @@ const CSS = `
 .modal[data-level="info"] .ico { background:rgba(10,132,255,.15); color:var(--accent); }
 .modal[data-level="info"] .nl { color:var(--accent); }
 
-/* cards, everything centred in them */
+/* cards — the title top-left in grey caps (bna's), the content centred
+   under it */
 .card { background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--radius-lg); padding:var(--space-6) var(--space-6) var(--space-5);
+  border-radius:var(--radius-lg); padding:var(--space-5) var(--space-6) var(--space-6);
   display:flex; flex-direction:column; align-items:center; gap:var(--space-5); }
-.card > h3 { margin:0; font-size:var(--text-xs); letter-spacing:.13em;
-  text-transform:uppercase; font-weight:700; opacity:.7; text-align:center; }
+.card > h3 { align-self:stretch; margin:0; font-size:var(--text-xs); letter-spacing:.13em;
+  text-transform:uppercase; font-weight:700; opacity:.7; text-align:left; }
 
 .legend, .reading { justify-content:center; }
 
@@ -236,7 +284,9 @@ const CSS = `
 
 const esc = s => String(s == null ? "" : s)
   .replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+// A number, or null for anything that is not one — null and "" included
+// (Number(null) is 0: a cleared value would draw as a zero reading).
+const num = v => { if (v == null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 
 // A reading in the unit an operator reads off the meter: a bare farad
 // value is scaled to pF / nF / µF / mF; any other unit is shown as sent.
@@ -254,7 +304,9 @@ function fmtC(c, unit) {
 }
 
 let _root = null;
+let _api = null;
 let _last = {};          // the values last drawn — Dismiss redraws them
+let _insp = { key: null, el: null };   // the inspection card, built once per inspection
 let _ack = null;         // the notice the operator dismissed (its key), or null
 
 // A notice's identity: the same words are the same notice. Dismissed
@@ -353,9 +405,109 @@ function noticeHtml(n) {
 // Draw, and wire the one control this screen has: Dismiss. The backdrop
 // has no handler on purpose — a stray tap on the bench must not take the
 // notice away.
+// ── the inspection card ───────────────────────────────────────────────
+const IC = { outer: "#ff9f0a", inner: "#0a84ff", whole: "#30d158", miss: "#ff453a", box: "#0a84ff" };
+
+function arc(cx, cy, r, a0, a1) {
+  const p = a => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)];
+  const [x0, y0] = p(a0), [x1, y1] = p(a1);
+  return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 0 1 ${x1.toFixed(1)},${y1.toFixed(1)}`;
+}
+
+// One inspection as the card's HTML: the frame (or a grey stand-in in sim,
+// sized to the geometry), and per tile a viewBox over it — the whole disc
+// in context for the detector, the disc close up for the other three.
+function inspectionHtml(c) {
+  const det = c.det, o = c.outer;
+  const W = num(c.w) || (det ? Math.round(det.box[2] + det.box[0]) : 1000);
+  const H = num(c.h) || (det ? Math.round(det.box[3] + det.box[1]) : 1000);
+  const src = c.img && _api && typeof _api.url === "function" ? _api.url(c.img) : c.img;
+  const pic = src ? `<image href="${esc(src)}" width="${W}" height="${H}"/>`
+                  : `<rect width="${W}" height="${H}" fill="#3a3a3c"/>`;
+  // the disc: its edge circle, else the detector's box as a circle
+  const disc = o || (det ? [(det.box[0] + det.box[2]) / 2, (det.box[1] + det.box[3]) / 2,
+                            Math.max(det.box[2] - det.box[0], det.box[3] - det.box[1]) / 2] : null);
+  const square = (k) => {
+    if (!disc) return `0 0 ${W} ${H}`;
+    const h = Math.min(disc[2] * k, W / 2, H / 2);
+    const x = Math.min(Math.max(disc[0] - h, 0), W - 2 * h), y = Math.min(Math.max(disc[1] - h, 0), H - 2 * h);
+    return `${x.toFixed(1)} ${y.toFixed(1)} ${(2 * h).toFixed(1)} ${(2 * h).toFixed(1)}`;
+  };
+  const near = square(1.12), far = square(2.4);
+  const sw = disc ? disc[2] * 2.24 / 260 : W / 260;          // ~1 screen px, in frame px
+  const cross = (x, y, col) => `<path d="M${x - 9 * sw},${y} h${18 * sw} M${x},${y - 9 * sw} v${18 * sw}" stroke="${col}" stroke-width="${2.2 * sw}"/>`;
+  const svg = (vb, body) => `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid slice">${body}</svg>`;
+  const t1 = svg(far, pic + (det ? `<rect x="${det.box[0]}" y="${det.box[1]}" width="${det.box[2] - det.box[0]}"
+      height="${det.box[3] - det.box[1]}" fill="none" stroke="${IC.box}" stroke-width="${3 * sw * 2.1}" rx="${4 * sw}"/>` : ""));
+  const i = c.inner;
+  const t2 = svg(near, pic + (o ? `<circle cx="${o[0]}" cy="${o[1]}" r="${o[2]}" fill="none" stroke="${IC.outer}" stroke-width="${2.6 * sw}"/>`
+      + cross(o[0], o[1], IC.outer) : "")
+    + (i ? `<circle cx="${i[0]}" cy="${i[1]}" r="${i[2]}" fill="none" stroke="${IC.inner}" stroke-width="${2.6 * sw}"/>`
+      + cross(i[0], i[1], IC.inner) : ""));
+  const covMin = num(c.cov_min);
+  const segs = o && Array.isArray(c.sectors) ? c.sectors.map((sh, k) => {
+    const step = 360 / c.sectors.length, ok = covMin == null || sh >= covMin;
+    return `<path d="${arc(o[0], o[1], o[2], k * step + 1.2, (k + 1) * step - 1.2)}" fill="none"
+      stroke="${ok ? IC.whole : IC.miss}" stroke-width="${(ok ? 7 : 11) * sw}" stroke-linecap="round"/>`;
+  }).join("") : "";
+  const t3 = svg(near, pic + (o ? `<circle cx="${o[0]}" cy="${o[1]}" r="${o[2]}" fill="rgba(0,0,0,.18)"/>` : "") + segs);
+  const f = c.face && c.face.circle;
+  const clip = `face-${esc(c.disc)}-${esc(c.cam).replace(/\W/g, "")}`;
+  const t4 = svg(near, f ? `<defs><clipPath id="${clip}"><circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}"/></clipPath></defs>
+      <rect width="${W}" height="${H}" fill="#8e8e93"/><g clip-path="url(#${clip})">${pic}</g>
+      <circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}" fill="none" stroke="rgba(255,255,255,.85)"
+        stroke-width="${1.6 * sw}" stroke-dasharray="${6 * sw} ${5 * sw}"/>` : `<rect width="${W}" height="${H}" fill="#8e8e93"/>`);
+  const cov = num(c.coverage), off = num(c.offset), offMax = num(c.off_max);
+  const fs = c.face ? c.face.state : null;
+  const tile = (n, title, body, tag, st) => `<div class="tile"><div class="frame">${body}
+      ${tag ? `<div class="tag">${tag}</div>` : ""}</div>
+    <div class="cap"><span class="n">${n}</span>${title}<span class="st ${st[0]}">${st[1]}</span></div></div>`;
+  const dash = ["off", "—"];
+  return `<div class="card insp">
+    <div class="ihead"><h3>Last inspection</h3>
+      <span class="who">${esc(cap(c.cam))} · disc ${esc(c.disc)}</span><span class="grow"></span>
+      ${c.why ? `<span class="why">${esc(String(c.why).replace(/^[^:]*:\s*/, ""))}</span>` : ""}
+      <span class="vpill ${esc(c.verdict)}">${c.verdict === "empty" ? "NO DISC" : esc(String(c.verdict || "").toUpperCase())}</span></div>
+    <div class="tiles">
+      ${tile(1, "Detector", t1, det ? `disc <b>${det.conf.toFixed(2)}</b>` : "no disc",
+             det ? ["ok", "found"] : ["bad", "none"])}
+      ${tile(2, "Circles", t2,
+             !det ? "" : !o ? "no circle the disc's size" :
+             off != null ? `offset <b>${off.toFixed(1)}</b> px · max ${offMax}` :
+             c.band ? "no inner circle" : `edge <b>${Math.round(o[2] * 2)}</b> px · no band`,
+             !det ? dash : !o ? ["bad", "none"] : off != null ? (off <= offMax ? ["ok", "concentric"] : ["bad", "off-centre"])
+             : c.band ? ["bad", "no inner"] : ["off", "edge only"])}
+      ${tile(3, "Chip", t3, cov != null ? `coverage <b>${cov.toFixed(2)}</b> · min ${covMin.toFixed(2)}` : "",
+             cov == null ? dash : cov >= covMin ? ["ok", "whole"] : ["bad", "chip"])}
+      ${tile(4, "Face", t4, !fs ? "" : fs === "off" ? "classifier off" : fs === "skipped" ? "not run — failed before it"
+             : `classifier <b>${esc(fs)}</b> · ${num(c.face.p).toFixed(2)}`,
+             !fs ? dash : fs === "off" ? ["off", "off"] : fs === "skipped" ? ["off", "not run"]
+             : fs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
+    </div></div>`;
+}
+
+const cap = s => { const t = String(s || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
+
+// The card's element for these values — rebuilt only when the inspection
+// changed, so its picture does not reload on every redraw.
+function inspectionEl(c) {
+  if (!c || typeof c !== "object") return null;
+  const key = JSON.stringify(c);
+  if (_insp.key !== key) {
+    const t = document.createElement("template");
+    t.innerHTML = inspectionHtml(c).trim();
+    _insp = { key, el: t.content.firstElementChild };
+  }
+  return _insp.el;
+}
+
 function render(v) {
   _last = v || {};
   _root.innerHTML = html(_last);
+  const slot = _root.querySelector("#insp-slot");
+  const card = inspectionEl(_last.inspection);
+  if (slot && card) slot.replaceWith(card);
+  else if (slot) slot.remove();
   const ack = _root.querySelector(".modal .ack");
   if (ack) ack.addEventListener("click", () => {
     const n = _last.notice;
@@ -389,18 +541,21 @@ function html(v) {
           </div>
         </div>
       </div>
-      <div class="col side">
+      <div class="col">
         <div class="card state">
           <h3>Run</h3>
           <h2>${esc(v.headline || "Waiting to start")}</h2>
           ${ringHtml(pct)}
         </div>
+      </div>
+      <div class="col">
         <div class="card">
           <h3>Last measurement</h3>
           ${readingHtml(v)}
         </div>
       </div>
     </div>
+    <div id="insp-slot"></div>
    </div>
   </div>`;
 }
@@ -417,6 +572,7 @@ export default {
     _root = document.createElement("div");
     _root.className = "root";
     root.appendChild(_root);
+    _api = api || null;
     render(api && api.values ? api.values : {});
   },
 
