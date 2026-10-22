@@ -61,12 +61,3 @@ classifier: medium
 # (ring_coverage, ring_offset_px; top_ring_coverage for the robot camera).
 ring_coverage: medium
 ring_offset: medium
-
-# The FACE CLASSIFIER — the pass/fail model on the bare face, on both
-# cameras: inside the band's inner circle (station), inside the disc's edge
-# (robot camera) — vision/disc_face.yaml. Off, neither camera classifies
-# at all: the station's ring and the detectors decide. Off by default: until
-# the face model is trained it runs the whole-disc model, whose answers on
-# a face-only crop are not to be trusted. On, it judges by the classifier
-# sensitivity above.
-face_check: false

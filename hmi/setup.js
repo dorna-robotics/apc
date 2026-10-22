@@ -275,11 +275,9 @@ function initial(api, key, fallback) {
 export function benchState(api) {
   const st = { in: {}, step: "bench", checks: {}, classifier: "medium",
                full: Number(initial(api, "stack_size", 0)) || 0,
-               // the ring's two sensitivities and the face classifier's
-               // switch (hmi/default.j2)
+               // the ring's two sensitivities (hmi/default.j2)
                ring_coverage: pick(initial(api, "ring_coverage", "medium"), COVERAGE_MODES),
-               ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES),
-               face_check: [true, "true", 1, "1"].includes(initial(api, "face_check", false)) };
+               ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES) };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
   const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
   if (CLS_MODES.some(m => m.key === c)) st.classifier = c;
@@ -453,15 +451,6 @@ function bodyHtml(st) {
         <div class="hint">${esc(OFFSET_MODES.find(m => m.key === st.ring_offset).hint)}</div>
       </div>
     </div>
-    <div class="card">
-      <h4>Face classifier — the bare face, both cameras</h4>
-      <div class="checks">
-        <label class="check${st.face_check ? " on" : ""}">
-          <input type="checkbox" data-face${st.face_check ? " checked" : ""}>
-          <span>Classify the face <span class="muted">— judged by the sensitivity above; off until the face model is trained</span></span>
-        </label>
-      </div>
-    </div>
   </div>`;
   }
   if (st.step === "check") {
@@ -540,12 +529,6 @@ function render(wrap, st) {
       render(wrap, st);
     };
   });
-  const face = wrap.querySelector("[data-face]");
-  if (face) face.onchange = () => {
-    if (frozen()) { face.checked = st.face_check; return; }
-    st.face_check = face.checked;
-    face.closest(".check").classList.toggle("on", face.checked);
-  };
   const allfull = q("#allfull");
   if (allfull) allfull.onclick = () => {
     if (frozen()) return;
@@ -606,7 +589,6 @@ export default {
       classifier: _st.classifier,
       ring_coverage: _st.ring_coverage,
       ring_offset: _st.ring_offset,
-      face_check: !!_st.face_check,
     };
   },
 

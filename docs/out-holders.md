@@ -46,15 +46,15 @@ A camera said the disc is bad, or saw no disc at all:
 - **Bottom (station) camera, before the anode.** No circle the disc's
   size; a chip (its edge's coverage under the run's `ring_coverage`); no
   inner circle of the band; or off-centre (beyond the run's
-  `ring_offset`); or, with `face_check` on, its face failed the
-  classifier. The disc goes
+  `ring_offset`); or the classifier failed it (the run's `classifier`
+  sensitivity). The disc goes
   straight to A6 / A7 without a measurement. If the camera saw *no* disc, the hand
   still goes through the drop (the suction is never released mid-way),
   but nothing is counted: the position's fill count and the fail tally
   do not move, so an empty hand never lifts the next real drop.
 - **Top (robot) camera, on the anode.** No circle the disc's size, a
-  chip (`ring_coverage`), or, with `face_check` on, its face failed the
-  classifier. No band here, so no concentricity. No clamp, no reading: the disc is
+  chip (`ring_coverage`), or the classifier failed it. No band here, so
+  no concentricity. No clamp, no reading: the disc is
   picked back off the anode and dropped at A6 / A7, counted. "No disc"
   here counts too, since the bottom camera had seen it.
 
@@ -83,7 +83,7 @@ One row per disc in `records/<run>/records.csv`:
 |---|---|---|
 | `result` | `pass` / `fail` | which kind of holder |
 | `out` | `Pass 1 A3`, `Fail 1 A5`, `Fail 1 A6 (empty hand)` | holder and position; `(empty hand)` = nothing was dropped or counted |
-| `reason` | `C = 4.7e-07`, `bottom camera: ring: off-centre 6.2 px`, `bottom camera: ring: chip, outer circle 0.33`, `bottom camera: face fail`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
+| `reason` | `C = 4.7e-07`, `bottom camera: ring: off-centre 6.2 px`, `bottom camera: ring: chip, outer circle 0.33`, `bottom camera: classifier fail`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
 | `ring_coverage`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (`top_ring_coverage`, `top_ring_box_ratio` the robot camera's) — choose the run's sensitivities from these |
 | `c_f` | farads | the reading, when the disc was measured |
 

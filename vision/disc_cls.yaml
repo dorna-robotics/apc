@@ -1,0 +1,23 @@
+# The disc PASS / FAIL CLASSIFIER — recipes.j2 inspector_cls (bottom_cls,
+# station camera) and inspector_robot_cls (top_cls, robot camera), the
+# last check on both cameras: run on the detector's box grown by
+# CLS_ROI_OFFSET px, cropped — the square crop the model was trained on
+# (vision/disc_pass_fail_cropped.pkl). Every setting of the detection is
+# here; recipes.j2 only names this file (workspace docs/vision-guide.md §5
+# "Config files"). Every relative path here is relative to THIS folder
+# (vision/). Nothing is saved, here or on the vision unit.
+detection:
+  cmd: cls
+  path: disc_pass_fail_cropped.pkl
+  # The top class and its probability. Two classes, so the other one is
+  # 1 - conf: actions.py derives P(pass) from this one entry and applies
+  # the run's sensitivity (the ``classifier`` kwarg — CLS_MODES) itself.
+  conf: 0.5
+  top_k: 1
+frames_avg: 1
+display:
+  label: 1              # class + confidence drawn on the frame
+  save_img: false
+  save_img_roi: false
+  client_save_img: false
+  client_save_img_roi: false

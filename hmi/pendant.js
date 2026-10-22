@@ -27,7 +27,7 @@
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
 //                [cx, cy, r], sectors [36], coverage, cov_min, offset,
-//                off_max, face {circle, state, p}, img, w, h} — img an
+//                off_max, cls {box, state, p, min}, img, w, h} — img an
 //                rt.asset path (api.url makes it loadable), w × h the
 //                frame it is in; absent in sim. Drawn as the inspection
 //                card under the columns: four tiles over the one frame.
@@ -63,7 +63,7 @@
 //
 // THE INSPECTION CARD — the last verdict, drawn on its own frame: (1) the
 // detector's box, (2) the disc's two circles, (3) the edge's 36 sectors,
-// green whole / red missing, (4) the face the classifier sees. One
+// green whole / red missing, (4) the square the classifier sees. One
 // picture (an rt.asset, held in memory by the runtime), every mark and
 // label drawn here over it — sharp at any size, nothing burned into
 // pixels. The card is built once per inspection and its element reused
@@ -462,29 +462,29 @@ function inspectionHtml(c) {
       stroke="${ok ? IC.whole : IC.miss}" stroke-width="${(ok ? 7 : 11) * sw}" stroke-linecap="round"/>`;
   }).join("") : "";
   const t3 = svg(near, pic + (o ? `<circle cx="${o[0]}" cy="${o[1]}" r="${o[2]}" fill="rgba(0,0,0,.18)"/>` : "") + segs);
-  const f = c.face && c.face.circle;
-  const clip = `face-${esc(c.disc)}-${esc(c.cam).replace(/\W/g, "")}`;
-  const t4 = svg(near, f ? `<defs><clipPath id="${clip}"><circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}"/></clipPath></defs>
-      <rect width="${W}" height="${H}" fill="#8e8e93"/><g clip-path="url(#${clip})">${pic}</g>
-      <circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}" fill="none" stroke="rgba(255,255,255,.85)"
-        stroke-width="${1.6 * sw}" stroke-dasharray="${6 * sw} ${5 * sw}"/>` : `<rect width="${W}" height="${H}" fill="#8e8e93"/>`);
+  // the classifier's square — exactly the crop it is handed (the box +
+  // CLS_ROI_OFFSET px), the frame beyond it shown as the server pads it
+  const k = c.cls && c.cls.box;
+  const t4 = k ? `<svg viewBox="${k[0]} ${k[1]} ${k[2] - k[0]} ${k[3] - k[1]}" preserveAspectRatio="xMidYMid meet">
+      <rect x="${k[0]}" y="${k[1]}" width="${k[2] - k[0]}" height="${k[3] - k[1]}" fill="#8e8e93"/>${pic}</svg>` : "";
   const cov = num(c.coverage), off = num(c.offset), offMax = num(c.off_max);
-  const fs = c.face ? c.face.state : null;
+  const cs = c.cls ? c.cls.state : null;
   // Where the disc stopped (actions.py ``failed_at``): the checks run
-  // detector → disc edge → chip → concentric → face, the first that fails
-  // decides, and every tile after the one it failed at never ran. The
-  // concentric check is tile 2's, but it runs after the chip — so a chip
-  // stops the face, and leaves tile 2 with its circles but no verdict on
-  // the centres.
+  // detector → disc edge → chip → concentric → classifier, the first that
+  // fails decides, and every tile after the one it failed at never ran.
+  // The concentric check is tile 2's, but it runs after the chip — so a
+  // chip stops the classifier, and leaves tile 2 with its circles but no
+  // verdict on the centres.
   const at = c.failed_at || null;
   const ran = { 2: at !== "detector", 3: !["detector", "circles"].includes(at),
-                4: at == null || at === "face" };
+                4: at == null || at === "classifier" };
   const tile = (n, title, body, tag, st) => `<div class="tile"><div class="frame">${body}
       ${tag ? `<div class="tag">${tag}</div>` : ""}</div>
     <div class="cap"><span class="n">${n}</span>${title}<span class="st ${st[0]}">${st[1]}</span></div></div>`;
   // A tile whose check never ran: no picture — a quiet hatched panel, the
   // tile's own outline, and where the disc stopped.
-  const stoppedAt = { detector: "Detector", circles: "Circles", chip: "Chip", concentric: "Circles", face: "Face" }[at] || "";
+  const stoppedAt = { detector: "Detector", circles: "Circles", chip: "Chip", concentric: "Circles",
+                      classifier: "Classifier" }[at] || "";
   const idle = (n, title) => `<div class="tile"><div class="frame ph"><div class="ph-in">${PH_ICON[n]}
       <b>Not run</b><span>Stopped at ${esc(stoppedAt)}</span></div></div>
     <div class="cap"><span class="n">${n}</span>${title}<span class="st off">not run</span></div></div>`;
@@ -508,20 +508,20 @@ function inspectionHtml(c) {
              : at === "chip" ? ["off", "not checked"] : ["bad", "no inner"])}
       ${!ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `coverage <b>${cov.toFixed(2)}</b> · min ${covMin.toFixed(2)}`,
              cov >= covMin ? ["ok", "whole"] : ["bad", "chip"])}
-      ${!ran[4] ? idle(4, "Face") : tile(4, "Face", t4,
-             fs === "off" ? "classifier off" : `classifier <b>${esc(fs)}</b> · ${num(c.face.p).toFixed(2)}`,
-             fs === "off" ? ["off", "off"] : fs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
+      ${!ran[4] ? idle(4, "Classifier") : tile(4, "Classifier", t4,
+             cs === "off" ? "classifier ignored" : `pass <b>${num(c.cls.p).toFixed(2)}</b> · min ${num(c.cls.min).toFixed(2)}`,
+             cs === "off" ? ["off", "ignored"] : cs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
     </div></div>`;
 }
 
 const cap = s => { const t = String(s || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
 
-// A not-run tile's outline — what that tile would have drawn: the box,
-// the two circles, the sectored edge, the face.
+// A not-run tile's outline — what that tile would have drawn: the two
+// circles, the sectored edge, the classifier's square around the disc.
 const PH_ICON = {
   2: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17"/><circle cx="24" cy="24" r="12.5"/></svg>`,
   3: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17" stroke-dasharray="7.5 3.2"/></svg>`,
-  4: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="15" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="2.5"/></svg>`,
+  4: `<svg viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="34" rx="4" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="11"/></svg>`,
 };
 
 // The card's element for these values — rebuilt only when the inspection
