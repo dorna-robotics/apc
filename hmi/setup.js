@@ -69,8 +69,8 @@ const CHIP_MODES = [
 ];
 const OFFSET_MODES = [
   { key: "low",    label: "Low",    hint: "the band's two centres at most 12 px apart" },
-  { key: "medium", label: "Medium", hint: "at most 8 px apart — good discs measured 1.4–4.5 px" },
-  { key: "high",   label: "High",   hint: "at most 5 px apart — close to a good disc's 4.5 px" },
+  { key: "medium", label: "Medium", hint: "at most 8 px apart — measured: bottom 1.4–4.5 px on good discs, top 0.1–7.7 px" },
+  { key: "high",   label: "High",   hint: "at most 5 px apart — close to a good disc's 4.5 px on the bottom" },
 ];
 // A sensitivity from a saved value — medium for anything not offered.
 const pick = (v, modes) => (modes.some(m => m.key === String(v).toLowerCase()) ? String(v).toLowerCase() : "medium");
@@ -487,7 +487,7 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Concentric sensitivity — the yellow band, station camera</h4>
+      <h4>Concentric sensitivity — the band's two centres, both cameras</h4>
       <div class="inner">
         <div class="row seg">${OFFSET_MODES.map(m =>
           `<button type="button" class="pos${st.ring_offset === m.key ? " armed" : ""}" data-ring="ring_offset" data-v="${m.key}">${esc(m.label)}</button>`).join("")}

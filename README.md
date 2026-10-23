@@ -13,8 +13,10 @@ the yellow band (`vision/disc_ring.yaml`), and must be unchipped: its
 edge's deepest dent no deeper than the run's `ring_chip` sensitivity
 (a chip is a notch in the band). The band's inner edge is
 found too, and the two must be concentric — the run's `ring_offset`
-sensitivity. The robot camera runs no circles (they were not accurate
-there). Last, the classifier judges the disc's masked face — a circle
+sensitivity. The robot camera measures its thin band's two circles too
+(`vision/disc_ring_top.yaml`, `ring`) and judges them concentric by the
+same `ring_offset` — no chip check there: from the top the chipped
+discs' edges read whole. Last, the classifier judges the disc's masked face — a circle
 10 px inside the band's inner edge (inside the detector's box on the
 robot camera), grey outside — cut exactly as its training crops were
 (`vision/disc_cls.yaml`; until the face model is trained, run with the
@@ -108,11 +110,12 @@ tab.
 |---|---|---|---|
 | `disc_od.yaml` | `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
 | `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, the edge's dent) | the station camera's circles: chip, concentric |
+| `disc_ring_top.yaml` | — | `ring` — the thin band's two edges along rays | the robot camera's circles: concentric, no chip |
 | `disc_cls.yaml` | the face model (the old `disc_pass_fail_cropped.pkl` until it is trained) | `cls` — pass / fail on the masked face | the visual verdict, both cameras, last — drop the new weights here |
 
-`recipes.j2` registers five detections — `bottom_od` / `bottom_ring` /
-`bottom_cls` on the station camera, `top_od` / `top_cls` on the robot
-camera — one Inspector recipe each. Each detection is
+`recipes.j2` registers six detections — `bottom_od` / `bottom_ring` /
+`bottom_cls` on the station camera, `top_od` / `top_ring` / `top_cls`
+on the robot camera — one Inspector recipe each. Each detection is
 `detection_preset: {config: vision/disc_od.yaml}` — a relative path is
 relative to the file it is written in: `config:` to recipes.j2, the
 paths inside the config to `vision/`; the client ships the model's bytes to the vision unit at

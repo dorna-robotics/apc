@@ -6,7 +6,7 @@
 {%- set hmp = "[true, smove]" -%}
 {#- Every detection's settings live in vision/ (beside this file), one
     config per model with the model beside it: vision/disc_od.yaml,
-    vision/disc_ring.yaml, vision/disc_cls.yaml.
+    vision/disc_ring.yaml, vision/disc_ring_top.yaml, vision/disc_cls.yaml.
     A relative path is relative to the file it is
     written in — config: to this file, the paths inside a config to
     vision/. -#}
@@ -60,10 +60,10 @@ disc_out_bad_1:
 # its camera (Inspector.detection_name):
 #   *      — the disc DETECTOR (od). Owns the motion too: present() on
 #            the station form. Runs on the WHOLE frame — no ROI.
-#   *_ring — the disc's CIRCLES (elp) on the detector's box grown by
-#            CLS_ROI_OFFSET px, cropped: the disc's edge judged for a
-#            chip, the band's two edges for concentricity. The station
-#            camera only — on the robot camera they were not accurate.
+#   *_ring — the band's two CIRCLES on the detector's box grown by
+#            CLS_ROI_OFFSET px, cropped: judged concentric, and on the
+#            station camera the disc's edge for a chip (elp + dent; the
+#            robot camera's thin band is ring's, no chip check).
 #   *_cls  — the pass/fail CLASSIFIER (cls), the last check: on the
 #            disc's masked face (actions.py _face_roi). Never moves.
 # The station pair share the station's solved pose (same ref_joints — the
@@ -93,8 +93,13 @@ inspector_robot:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_robot_1, detection_name: top_od, detection_preset: {config: vision/disc_od.yaml}, speed_factor: {{ sf }}}
 
-# Its classifier (vision/disc_cls.yaml, the station's own config) — no
-# circles here: the face is cut inside the detector's box.
+# Its band's two circles (vision/disc_ring_top.yaml — ring, no chip check)
+# and the classifier (vision/disc_cls.yaml, the station's own config; the
+# face is cut inside the detector's box).
+inspector_robot_ring:
+  class: workspace.recipes.inspector.Inspector
+  kwargs: {component: inspection_poe_robot_1, detection_name: top_ring, detection_preset: {config: vision/disc_ring_top.yaml}, speed_factor: {{ sf }}}
+
 inspector_robot_cls:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_robot_1, detection_name: top_cls, detection_preset: {config: vision/disc_cls.yaml}, speed_factor: {{ sf }}}

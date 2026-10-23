@@ -26,10 +26,10 @@
 //   last_result  "pass" | "fail"
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
-//                [cx, cy, r], ring, dent, dent_at, dent_max, offset,
-//                off_max, cls {circle, state, p, min}, img, w, h} — ring
-//                false: a camera without circles (the robot camera), its
-//                Circles and Chip tiles not checked; img an
+//                [cx, cy, r], chip, dent, dent_at, dent_max, offset,
+//                off_max, cls {circle, state, p, min}, img, w, h} — chip
+//                false: a camera without a chip check (the robot camera),
+//                its Chip tile not checked; img an
 //                rt.asset path (api.url makes it loadable), w × h the
 //                frame it is in; absent in sim. Drawn as the inspection
 //                card under the columns: four tiles over the one frame.
@@ -505,8 +505,8 @@ function inspectionHtml(c) {
       ${tag ? `<div class="tag">${tag}</div>` : ""}</div>
     <div class="cap"><span class="n">${n}</span>${title}<span class="st ${st[0]}">${st[1]}</span></div></div>`;
   // A tile whose check never ran: no picture — a quiet hatched panel, the
-  // tile's own outline, and why: where the disc stopped, or (c.ring false)
-  // that this camera has no such check.
+  // tile's own outline, and why: where the disc stopped, or (c.chip false)
+  // that this camera has no chip check.
   const stoppedAt = { detector: "Detector", circles: "Circles", chip: "Chip", concentric: "Circles",
                       classifier: "Classifier" }[at] || "";
   const idle = (n, title, head = "Not run", why = `Stopped at ${esc(stoppedAt)}`) => `<div class="tile">
@@ -520,8 +520,7 @@ function inspectionHtml(c) {
     <div class="tiles">
       ${tile(1, "Detector", t1, det ? `disc <b>${det.conf.toFixed(2)}</b>` : "no disc",
              det ? ["ok", "found"] : ["bad", "none"])}
-      ${c.ring === false ? idle(2, "Circles", "Not checked", "No circle check on this camera")
-             : !ran[2] ? idle(2, "Circles") : tile(2, "Circles", t2,
+      ${!ran[2] ? idle(2, "Circles") : tile(2, "Circles", t2,
              !o ? "no circle the disc's size"
              : off != null ? `offset <b>${off.toFixed(1)}</b> px · max ${offMax}`
              : at === "chip" ? `edge <b>${Math.round(o[2] * 2)}</b> px · centres not checked`
@@ -529,7 +528,7 @@ function inspectionHtml(c) {
              !o ? ["bad", "none"]
              : off != null ? (off <= offMax ? ["ok", "concentric"] : ["bad", "off-centre"])
              : at === "chip" ? ["off", "not checked"] : ["bad", "no inner"])}
-      ${c.ring === false ? idle(3, "Chip", "Not checked", "No chip check on this camera")
+      ${c.chip === false ? idle(3, "Chip", "Not checked", "No chip check on this camera")
              : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `dent <b>${dent.toFixed(1)}</b> px · max ${dentMax}`,
              chip ? ["bad", "chip"] : ["ok", "whole"])}
       ${!ran[4] ? idle(4, "Classifier") : tile(4, "Classifier", t4,
