@@ -26,7 +26,7 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
    4. InspectBottom station camera: DETECT the disc (vision/disc_od.yaml),
                     then the RING on its box: the yellow band's two circles
                     (vision/disc_ring.yaml) — the outer one the disc's size,
-                    whole (ring_coverage), concentric (ring_offset);
+                    unchipped (ring_chip), concentric (ring_offset);
                     then CLASSIFY its face — the masked circle inside the
                     band (vision/disc_cls.yaml). Two
                     outcomes:
@@ -226,22 +226,22 @@ FACE_MARGIN        = 10
 CLS_MODES          = {"high": 0.75, "medium": 0.50, "low": 0.25, "ignore": None}
 CLS_MODE           = "medium"
 # The RING — the checks on the disc's circles, after the detector
-# (_judge; vision/disc_ring.yaml finds them, each with a conf: its worst
-# 10° sector's share of its outline the image shows). Two SENSITIVITIES,
-# run parameters like the classifier's (hmi/default.j2, the setup
-# screen), written by setup(). The station camera only:
-#   COVERAGE_MODES  the least the disc's edge may show in its worst
-#                   sector — a chip or a break pulls it down. Measured: good
-#                   discs 0.70–1.00 (a nick in the band 0.70), chips and
-#                   breaks 0.00–0.36.
+# (_judge; vision/disc_ring.yaml finds them, each with its edge's deepest
+# DENT, px, and where — vision-guide §5). Two SENSITIVITIES, run
+# parameters like the classifier's (hmi/default.j2, the setup screen),
+# written by setup(). The station camera only:
+#   CHIP_MODES      the deepest dent the disc's edge may have, px — a chip
+#                   is a notch in the band. Measured on the disc_cls set
+#                   (90 crops, 2026-10-22): chips 3.6–15 px, good discs
+#                   1.1–3.1 px. The margin is thin: confirm on a fresh set.
 #   OFFSET_MODES    the most the band's two centres may be apart, px. Good
 #                   discs measured 1.4–4.5 px; no off-centre disc measured
 #                   yet — tighten once one is.
 # high is the strictest (catches the most), low the most lenient.
-COVERAGE_MODES     = {"high": 0.7, "medium": 0.5, "low": 0.3}
+CHIP_MODES         = {"high": 3.0, "medium": 3.5, "low": 5.0}
 OFFSET_MODES       = {"high": 5, "medium": 8, "low": 12}
-RING_COVERAGE_MODE = "medium"
-RING_COVERAGE_MIN  = COVERAGE_MODES[RING_COVERAGE_MODE]
+RING_CHIP_MODE     = "medium"
+RING_CHIP_PX       = CHIP_MODES[RING_CHIP_MODE]
 RING_OFFSET_MODE   = "medium"
 RING_OFFSET_PX     = OFFSET_MODES[RING_OFFSET_MODE]
 # RING_BOX_TOL: the disc's edge is a circle within this share of the
@@ -465,8 +465,9 @@ def _circles(action, cam, box):
 
     def _sim(d):
         r = d / 2
-        return {"cls": "elp", "conf": 1.0, "center": [round(cx), round(cy)],
-                "corners": [[cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r]]}
+        return {"cls": "elp", "conf": 1, "center": [round(cx), round(cy)],
+                "corners": [[cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r]],
+                "dent": 1.5, "dent_at": 0.0}
 
     found = action.ctx.recipes[cam["ring"]].detect(
         roi={"corners": box, "offset": CLS_ROI_OFFSET, "crop": True},
@@ -500,7 +501,7 @@ def _judge(action, outer, inner, box):
     on a pass) — the inspection card's last tile that ran. The first that
     fails decides:
       1. the disc's edge found (a circle the disc's size)
-      2. the edge whole — its worst 10° sector at least RING_COVERAGE_MIN.
+      2. the edge unchipped — its deepest dent at most RING_CHIP_PX.
          Before the centres: a chip or a break pulls the fits sideways, so
          a broken disc also reads off-centre, and the chip is the cause
       3. the band's inner edge found, and the two centres
@@ -508,10 +509,10 @@ def _judge(action, outer, inner, box):
     if outer is None:
         return "no edge", {}, "circles"
     m = {"ring_box_ratio": round(_diameter(outer["corners"]) / _diameter(box), 3),
-         "ring_coverage": round(outer.get("conf", 1), 3)}
-    say = (f"ring: edge {_diameter(outer['corners']):.0f} px, coverage {m['ring_coverage']:.2f} "
-           f"(min {RING_COVERAGE_MIN:g}, {RING_COVERAGE_MODE})")
-    if m["ring_coverage"] < RING_COVERAGE_MIN:
+         "ring_dent_px": outer["dent"], "ring_dent_at": outer["dent_at"]}
+    say = (f"ring: edge {_diameter(outer['corners']):.0f} px, deepest dent {m['ring_dent_px']:.1f} px "
+           f"at {m['ring_dent_at']}° (max {RING_CHIP_PX:g}, {RING_CHIP_MODE})")
+    if m["ring_dent_px"] > RING_CHIP_PX:
         action.ctx.runtime.step(say)
         return "chip", m, "chip"
     if inner is None:
@@ -528,7 +529,7 @@ def _judge(action, outer, inner, box):
 
 # ── The inspection card (the pendant's "Last inspection") ─────────────
 # Every inspection's verdict, drawn on its own frame: the detector's box,
-# the disc's two circles, the edge's 36 sectors, the face the classifier sees. rt.op
+# the disc's two circles, the edge's deepest dent, the face the classifier sees. rt.op
 # carries the numbers (``inspection``); the frame is an rt.asset — held in
 # memory, never on disk — the pendant loads by URL. Fetching the frame is
 # observability, so it never holds the robot (project-guide §8): a worker
@@ -596,14 +597,14 @@ def _inspect(action, cam, disc):
     the operator recovers). Every verdict also goes to the pendant's
     inspection card (_CARD)."""
     card = {"cam": cam["name"], "disc": disc + 1, "ring": cam["ring"] is not None,
-            "cov_min": RING_COVERAGE_MIN, "off_max": RING_OFFSET_PX}
+            "dent_max": RING_CHIP_PX, "off_max": RING_OFFSET_PX}
 
     def verdict(v, why, m, alias, failed_at=None):
         # failed_at: the check the disc stopped at (detector / circles /
         # chip / concentric / classifier) — the card draws the tiles after it as
         # not run
         _CARD.post(action.ctx, alias, dict(card, verdict=v, why=why, failed_at=failed_at,
-                                           coverage=m.get("ring_coverage"),
+                                           dent=m.get("ring_dent_px"), dent_at=m.get("ring_dent_at"),
                                            offset=m.get("ring_offset_px")))
         return v, why, m
 
@@ -624,8 +625,7 @@ def _inspect(action, cam, disc):
         if circles is None:
             return None
         outer, inner = circles
-        card.update(outer=_circle(outer), inner=_circle(inner),
-                    sectors=outer.get("sectors") if outer else None)
+        card.update(outer=_circle(outer), inner=_circle(inner))
         # the band's inner edge — a disc without one fails _judge
         face, frame = inner, cam["ring"]
         why, m, stage = _judge(action, outer, inner, box)
@@ -837,14 +837,14 @@ def setup(**kwargs):
     CLS_MODE = mode if mode in CLS_MODES else "medium"
 
     # The ring's two sensitivities.
-    global RING_COVERAGE_MODE, RING_COVERAGE_MIN, RING_OFFSET_MODE, RING_OFFSET_PX
+    global RING_CHIP_MODE, RING_CHIP_PX, RING_OFFSET_MODE, RING_OFFSET_PX
     def _mode(key, modes):
         """A sensitivity from its kwarg — the schema's default for a
         missing one, medium for anything not in ``modes`` (a typo)."""
         v = str(kwargs.get(key) or _schema_default(key)).strip().lower()
         return v if v in modes else "medium"
-    RING_COVERAGE_MODE = _mode("ring_coverage", COVERAGE_MODES)
-    RING_COVERAGE_MIN = COVERAGE_MODES[RING_COVERAGE_MODE]
+    RING_CHIP_MODE = _mode("ring_chip", CHIP_MODES)
+    RING_CHIP_PX = CHIP_MODES[RING_CHIP_MODE]
     RING_OFFSET_MODE = _mode("ring_offset", OFFSET_MODES)
     RING_OFFSET_PX = OFFSET_MODES[RING_OFFSET_MODE]
 

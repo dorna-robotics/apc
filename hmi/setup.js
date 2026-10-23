@@ -59,13 +59,13 @@ const CLS_MODES = [
   { key: "medium", label: "Medium", hint: "a pass needs 50 % — the model's own call" },
   { key: "high",   label: "High",   hint: "a pass needs 75 % — catches the most" },
 ];
-// The ring's two sensitivities — the ``ring_coverage`` / ``ring_offset``
-// kwargs. Mirror COVERAGE_MODES / OFFSET_MODES in actions.py and say the
+// The ring's two sensitivities — the ``ring_chip`` / ``ring_offset``
+// kwargs. Mirror CHIP_MODES / OFFSET_MODES in actions.py and say the
 // number; left to right, least to most strict, as the classifier's.
-const COVERAGE_MODES = [
-  { key: "low",    label: "Low",    hint: "the edge must show 30 % in its worst 10° — lets small chips through" },
-  { key: "medium", label: "Medium", hint: "the edge must show 50 % in its worst 10° — good discs measured 70–100 %, chips 0–36 %" },
-  { key: "high",   label: "High",   hint: "the edge must show 70 % in its worst 10° — a nick in the band can fail a good disc" },
+const CHIP_MODES = [
+  { key: "low",    label: "Low",    hint: "a notch in the band up to 5 px deep passes — lets small chips through" },
+  { key: "medium", label: "Medium", hint: "a notch deeper than 3.5 px is a chip — good discs measured 1.1–3.1 px, chips 3.6–15 px" },
+  { key: "high",   label: "High",   hint: "a notch deeper than 3 px is a chip — close to a good disc's 3.1 px" },
 ];
 const OFFSET_MODES = [
   { key: "low",    label: "Low",    hint: "the band's two centres at most 12 px apart" },
@@ -276,7 +276,7 @@ export function benchState(api) {
   const st = { in: {}, step: "bench", checks: {}, classifier: "medium",
                full: Number(initial(api, "stack_size", 0)) || 0,
                // the ring's two sensitivities (hmi/default.j2)
-               ring_coverage: pick(initial(api, "ring_coverage", "medium"), COVERAGE_MODES),
+               ring_chip: pick(initial(api, "ring_chip", "medium"), CHIP_MODES),
                ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES) };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
   const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
@@ -434,12 +434,12 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Chip sensitivity — how whole the disc's edge must be, both cameras</h4>
+      <h4>Chip sensitivity — the deepest notch in the band, station camera</h4>
       <div class="inner">
-        <div class="row seg">${COVERAGE_MODES.map(m =>
-          `<button type="button" class="pos${st.ring_coverage === m.key ? " armed" : ""}" data-ring="ring_coverage" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
+        <div class="row seg">${CHIP_MODES.map(m =>
+          `<button type="button" class="pos${st.ring_chip === m.key ? " armed" : ""}" data-ring="ring_chip" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
         </div>
-        <div class="hint">${esc(COVERAGE_MODES.find(m => m.key === st.ring_coverage).hint)}</div>
+        <div class="hint">${esc(CHIP_MODES.find(m => m.key === st.ring_chip).hint)}</div>
       </div>
     </div>
     <div class="card">
@@ -587,7 +587,7 @@ export default {
       in_1: _st.in.in_1.map(f => (f ? _st.full : 0)),
       in_2: _st.in.in_2.map(f => (f ? _st.full : 0)),
       classifier: _st.classifier,
-      ring_coverage: _st.ring_coverage,
+      ring_chip: _st.ring_chip,
       ring_offset: _st.ring_offset,
     };
   },

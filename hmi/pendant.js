@@ -26,7 +26,7 @@
 //   last_result  "pass" | "fail"
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
-//                [cx, cy, r], sectors [36], ring, coverage, cov_min, offset,
+//                [cx, cy, r], ring, dent, dent_at, dent_max, offset,
 //                off_max, cls {circle, state, p, min}, img, w, h} — ring
 //                false: a camera without circles (the robot camera), its
 //                Circles and Chip tiles not checked; img an
@@ -64,8 +64,9 @@
 // on the platform's own control rail.
 //
 // THE INSPECTION CARD — the last verdict, drawn on its own frame: (1) the
-// detector's box, (2) the disc's two circles, (3) the edge's 36 sectors,
-// green whole / red missing, (4) the face the classifier sees. One
+// detector's box, (2) the disc's two circles, (3) a close-up of the
+// edge's deepest dent, ringed red when it is a chip, (4) the face the
+// classifier sees. One
 // picture (an rt.asset, held in memory by the runtime), every mark and
 // label drawn here over it — sharp at any size, nothing burned into
 // pixels. The card is built once per inspection and its element reused
@@ -421,12 +422,6 @@ function noticeHtml(n) {
 // ── the inspection card ───────────────────────────────────────────────
 const IC = { outer: "#ff9f0a", inner: "#0a84ff", whole: "#30d158", miss: "#ff453a", box: "#0a84ff" };
 
-function arc(cx, cy, r, a0, a1) {
-  const p = a => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)];
-  const [x0, y0] = p(a0), [x1, y1] = p(a1);
-  return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 0 1 ${x1.toFixed(1)},${y1.toFixed(1)}`;
-}
-
 // One inspection as the card's HTML: the frame (or a grey stand-in in sim,
 // sized to the geometry), and per tile a viewBox over it — the whole disc
 // in context for the detector, the disc close up for the other three.
@@ -457,13 +452,21 @@ function inspectionHtml(c) {
       + cross(o[0], o[1], IC.outer) : "")
     + (i ? `<circle cx="${i[0]}" cy="${i[1]}" r="${i[2]}" fill="none" stroke="${IC.inner}" stroke-width="${2.6 * sw}"/>`
       + cross(i[0], i[1], IC.inner) : ""));
-  const covMin = num(c.cov_min);
-  const segs = o && Array.isArray(c.sectors) ? c.sectors.map((sh, k) => {
-    const step = 360 / c.sectors.length, ok = covMin == null || sh >= covMin;
-    return `<path d="${arc(o[0], o[1], o[2], k * step + 1.2, (k + 1) * step - 1.2)}" fill="none"
-      stroke="${ok ? IC.whole : IC.miss}" stroke-width="${(ok ? 7 : 11) * sw}" stroke-linecap="round"/>`;
-  }).join("") : "";
-  const t3 = svg(near, pic + (o ? `<circle cx="${o[0]}" cy="${o[1]}" r="${o[2]}" fill="rgba(0,0,0,.18)"/>` : "") + segs);
+  // the deepest dent, close up: a notch a few px deep is invisible on the
+  // whole disc. The fitted edge dashed, the dent ringed — red past the max.
+  const dent = num(c.dent), dentMax = num(c.dent_max), da = num(c.dent_at);
+  const chip = dent != null && dentMax != null && dent > dentMax;
+  let t3 = svg(near, pic);
+  if (o && da != null) {
+    const x = o[0] + o[2] * Math.cos(da * Math.PI / 180), y = o[1] + o[2] * Math.sin(da * Math.PI / 180);
+    const h = Math.min(o[2] * 0.2, W / 2, H / 2), zs = sw * 0.2 / 1.12;      // ~1 screen px at this zoom
+    const vx = Math.min(Math.max(x - h, 0), W - 2 * h), vy = Math.min(Math.max(y - h, 0), H - 2 * h);
+    t3 = svg(`${vx.toFixed(1)} ${vy.toFixed(1)} ${(2 * h).toFixed(1)} ${(2 * h).toFixed(1)}`, pic
+      + `<circle cx="${o[0]}" cy="${o[1]}" r="${o[2]}" fill="none" stroke="${IC.outer}" stroke-width="${1.6 * zs}"
+          stroke-dasharray="${6 * zs} ${5 * zs}"/>`
+      + `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(h * 0.32).toFixed(1)}" fill="none"
+          stroke="${chip ? IC.miss : IC.whole}" stroke-width="${3 * zs}"/>`);
+  }
   // the classifier's input — exactly the crop it is handed: the face
   // circle, grey outside (the vision ROI's own fill)
   const f = c.cls && c.cls.circle;
@@ -472,7 +475,7 @@ function inspectionHtml(c) {
       <circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}"/></clipPath></defs><g clip-path="url(#${clip})">${pic}</g>
       <circle cx="${f[0]}" cy="${f[1]}" r="${f[2]}" fill="none" stroke="rgba(255,255,255,.85)"
         stroke-width="${1.6 * sw}" stroke-dasharray="${6 * sw} ${5 * sw}"/>` : ""));
-  const cov = num(c.coverage), off = num(c.offset), offMax = num(c.off_max);
+  const off = num(c.offset), offMax = num(c.off_max);
   const cs = c.cls ? c.cls.state : null;
   // Where the disc stopped (actions.py ``failed_at``): the checks run
   // detector → disc edge → chip → concentric → classifier, the first that
@@ -512,8 +515,8 @@ function inspectionHtml(c) {
              : off != null ? (off <= offMax ? ["ok", "concentric"] : ["bad", "off-centre"])
              : at === "chip" ? ["off", "not checked"] : ["bad", "no inner"])}
       ${c.ring === false ? idle(3, "Chip", "Not checked", "No chip check on this camera")
-             : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `coverage <b>${cov.toFixed(2)}</b> · min ${covMin.toFixed(2)}`,
-             cov >= covMin ? ["ok", "whole"] : ["bad", "chip"])}
+             : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `dent <b>${dent.toFixed(1)}</b> px · max ${dentMax}`,
+             chip ? ["bad", "chip"] : ["ok", "whole"])}
       ${!ran[4] ? idle(4, "Classifier") : tile(4, "Classifier", t4,
              cs === "off" ? "classifier ignored" : `pass <b>${num(c.cls.p).toFixed(2)}</b> · min ${num(c.cls.min).toFixed(2)}`,
              cs === "off" ? ["off", "ignored"] : cs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
@@ -523,7 +526,7 @@ function inspectionHtml(c) {
 const cap = s => { const t = String(s || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 // A not-run tile's outline — what that tile would have drawn: the two
-// circles, the sectored edge, the face the classifier sees.
+// circles, the edge, the face the classifier sees.
 const PH_ICON = {
   2: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17"/><circle cx="24" cy="24" r="12.5"/></svg>`,
   3: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17" stroke-dasharray="7.5 3.2"/></svg>`,

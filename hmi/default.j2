@@ -51,16 +51,15 @@ classifier: medium
 # THE RING — the checks on the disc's circles, after the detector
 # (vision/disc_ring.yaml; actions.py _judge). Two SENSITIVITIES, like the
 # classifier's: high is the strictest, low the most lenient. The numbers
-# are COVERAGE_MODES / OFFSET_MODES in actions.py.
-#   ring_coverage  how much of the disc's edge must show in its worst 10°
-#                  sector — a chip or a break pulls it down. The station
-#                  camera (the robot camera runs no circles).
-#                  high 0.7, medium 0.5, low 0.3. Measured: good discs
-#                  0.70–1.00, chips and breaks 0.00–0.36.
+# are CHIP_MODES / OFFSET_MODES in actions.py.
+#   ring_chip      the deepest dent the disc's edge may have — a chip is a
+#                  notch in the band. The station camera (the robot camera
+#                  runs no circles). high 3.0 px, medium 3.5 px, low 5.0 px.
+#                  Measured: good discs 1.1–3.1 px, chips 3.6–15 px.
 #   ring_offset    how far apart the yellow band's two centres may be —
 #                  concentric. The station camera. high 5 px, medium 8 px,
 #                  low 12 px. Measured: good discs 1.4–4.5 px.
-# Every disc's measured coverage and offset are in the records sheet
-# (ring_coverage, ring_offset_px).
-ring_coverage: medium
+# Every disc's measured dent and offset are in the records sheet
+# (ring_dent_px, ring_offset_px).
+ring_chip: medium
 ring_offset: medium

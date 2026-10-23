@@ -9,19 +9,19 @@ through the bench at a time, `ROUTE` at the bottom of `actions.py`.
 
 Both cameras run one flow (`_inspect`): the detector finds the disc.
 On the station camera the disc's edge is then found on its box, through
-the yellow band (`vision/disc_ring.yaml`), and must be whole: its worst
-10° sector showing enough of its outline, the run's `ring_coverage`
-sensitivity (a chip or a break pulls it down). The band's inner edge is
+the yellow band (`vision/disc_ring.yaml`), and must be unchipped: its
+edge's deepest dent no deeper than the run's `ring_chip` sensitivity
+(a chip is a notch in the band). The band's inner edge is
 found too, and the two must be concentric — the run's `ring_offset`
 sensitivity. The robot camera runs no circles (they were not accurate
 there). Last, the classifier judges the disc's masked face — a circle
 10 px inside the band's inner edge (inside the detector's box on the
 robot camera), grey outside — cut exactly as its training crops were
 (`vision/disc_cls.yaml`; until the face model is trained, run with the
-classifier on Ignore). Every disc's measured coverage, offset and
+classifier on Ignore). Every disc's measured dent, offset and
 edge ÷ box ratio are in the records sheet, and the pendant's **Last
 inspection** card shows the latest verdict on its own frame — the
-detector's box, the two circles, the edge's 36 sectors, the face the classifier sees — the
+detector's box, the two circles, a close-up of the edge's deepest dent, the face the classifier sees — the
 frame held in memory by the runtime (`rt.asset`), never saved. How sure the classifier must
 be is the run's
 `classifier` setting on the setup screen: high (a pass needs 75 %),
@@ -107,7 +107,7 @@ tab.
 | config | model | type | for |
 |---|---|---|---|
 | `disc_od.yaml` | `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
-| `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, 10° coverage) | the station camera's circles: chip, concentric |
+| `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, the edge's dent) | the station camera's circles: chip, concentric |
 | `disc_cls.yaml` | the face model (the old `disc_pass_fail_cropped.pkl` until it is trained) | `cls` — pass / fail on the masked face | the visual verdict, both cameras, last — drop the new weights here |
 
 `recipes.j2` registers five detections — `bottom_od` / `bottom_ring` /

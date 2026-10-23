@@ -44,7 +44,7 @@ clear it by hand and Resume.
 A camera said the disc is bad, or saw no disc at all:
 
 - **Bottom (station) camera, before the anode.** No circle the disc's
-  size; a chip (its edge's coverage under the run's `ring_coverage`); no
+  size; a chip (its edge's deepest dent past the run's `ring_chip`); no
   inner circle of the band; or off-centre (beyond the run's
   `ring_offset`); or the classifier failed it (the run's `classifier`
   sensitivity). The disc goes
@@ -52,9 +52,8 @@ A camera said the disc is bad, or saw no disc at all:
   still goes through the drop (the suction is never released mid-way),
   but nothing is counted: the position's fill count and the fail tally
   do not move, so an empty hand never lifts the next real drop.
-- **Top (robot) camera, on the anode.** No circle the disc's size, a
-  chip (`ring_coverage`), or the classifier failed it. No band here, so
-  no concentricity. No clamp, no reading: the disc is
+- **Top (robot) camera, on the anode.** The classifier failed it (the
+  top camera runs no circles). No clamp, no reading: the disc is
   picked back off the anode and dropped at A6 / A7, counted. "No disc"
   here counts too, since the bottom camera had seen it.
 
@@ -84,7 +83,7 @@ One row per disc in `records/<run>/records.csv`:
 | `result` | `pass` / `fail` | which kind of holder |
 | `out` | `Pass 1 A3`, `Fail 1 A5`, `Fail 1 A6 (empty hand)` | holder and position; `(empty hand)` = nothing was dropped or counted |
 | `reason` | `C = 4.7e-07`, `bottom camera: chip`, `bottom camera: off-centre`, `bottom camera: classifier fail`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
-| `ring_coverage`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (the robot camera runs none) — choose the run's sensitivities from these |
+| `ring_dent_px`, `ring_dent_at`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (the robot camera runs none) — choose the run's sensitivities from these |
 | `c_f` | farads | the reading, when the disc was measured |
 
 The pendant shows the same: a count in every OUT position, the pass /
