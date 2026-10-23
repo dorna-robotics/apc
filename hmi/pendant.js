@@ -499,14 +499,17 @@ function inspectionHtml(c) {
   // chip stops the classifier, and leaves tile 2 with its circles but no
   // verdict on the centres.
   const at = c.failed_at || null;
+  // checks the run ignores (actions.py ``ignored``): chip / concentric /
+  // classifier; ``circles`` false — no check used them, none were looked for
+  const ign = new Set(Array.isArray(c.ignored) ? c.ignored : []);
   const ran = { 2: at !== "detector", 3: !["detector", "circles"].includes(at),
                 4: at == null || at === "classifier" };
   const tile = (n, title, body, tag, st) => `<div class="tile"><div class="frame">${body}
       ${tag ? `<div class="tag">${tag}</div>` : ""}</div>
     <div class="cap"><span class="n">${n}</span>${title}<span class="st ${st[0]}">${st[1]}</span></div></div>`;
   // A tile whose check never ran: no picture — a quiet hatched panel, the
-  // tile's own outline, and why: where the disc stopped, or (c.chip false)
-  // that this camera has no chip check.
+  // tile's own outline, and why: where the disc stopped, that the run
+  // ignores the check, or (c.chip false) that this camera has none.
   const stoppedAt = { detector: "Detector", circles: "Circles", chip: "Chip", concentric: "Circles",
                       classifier: "Classifier" }[at] || "";
   const idle = (n, title, head = "Not run", why = `Stopped at ${esc(stoppedAt)}`) => `<div class="tile">
@@ -520,18 +523,26 @@ function inspectionHtml(c) {
     <div class="tiles">
       ${tile(1, "Detector", t1, det ? `disc <b>${det.conf.toFixed(2)}</b>` : "no disc",
              det ? ["ok", "found"] : ["bad", "none"])}
-      ${!ran[2] ? idle(2, "Circles") : tile(2, "Circles", t2,
+      ${c.circles === false ? idle(2, "Circles", "Ignored", "No check uses them")
+             : !ran[2] ? idle(2, "Circles") : tile(2, "Circles", t2,
              !o ? "no circle the disc's size"
+             : at === "concentric" && off == null ? "no inner circle"
+             : ign.has("concentric") ? `edge <b>${Math.round(o[2] * 2)}</b> px · centres ignored`
              : off != null ? `offset <b>${off.toFixed(1)}</b> px · max ${offMax}`
              : at === "chip" ? `edge <b>${Math.round(o[2] * 2)}</b> px · centres not checked`
              : "no inner circle",
              !o ? ["bad", "none"]
+             : at === "concentric" && off == null ? ["bad", "no inner"]
+             : ign.has("concentric") ? ["off", "ignored"]
              : off != null ? (off <= offMax ? ["ok", "concentric"] : ["bad", "off-centre"])
              : at === "chip" ? ["off", "not checked"] : ["bad", "no inner"])}
       ${c.chip === false ? idle(3, "Chip", "Not checked", "No chip check on this camera")
+             : ign.has("chip") ? idle(3, "Chip", "Ignored", "The chip check is ignored this run")
              : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `dent <b>${dent.toFixed(1)}</b> px · max ${dentMax}`,
              chip ? ["bad", "chip"] : ["ok", "whole"])}
-      ${!ran[4] ? idle(4, "Classifier") : tile(4, "Classifier", t4,
+      ${!ran[4] ? idle(4, "Classifier")
+             : cs === "off" && !f ? idle(4, "Classifier", "Ignored", "The classifier is ignored this run")
+             : tile(4, "Classifier", t4,
              cs === "off" ? "classifier ignored" : `pass <b>${num(c.cls.p).toFixed(2)}</b> · min ${num(c.cls.min).toFixed(2)}`,
              cs === "off" ? ["off", "ignored"] : cs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
     </div></div>`;

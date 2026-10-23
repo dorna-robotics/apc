@@ -50,8 +50,10 @@ classifier: medium
 
 # THE RING — the checks on the disc's circles, after the detector
 # (vision/disc_ring.yaml, disc_ring_top.yaml; actions.py _judge). Two SENSITIVITIES, like the
-# classifier's: high is the strictest, low the most lenient. The numbers
-# are CHIP_MODES / OFFSET_MODES in actions.py.
+# classifier's: high is the strictest, low the most lenient, ignore skips
+# the check (the circles are looked for only while a check uses them —
+# chip, centres, or the classifier's face). The numbers are CHIP_MODES /
+# OFFSET_MODES in actions.py.
 #   ring_chip      the deepest dent the disc's edge may have — a chip is a
 #                  notch in the band. The station camera (chips show from
 #                  the bottom). high 3.0 px, medium 3.5 px, low 5.0 px.

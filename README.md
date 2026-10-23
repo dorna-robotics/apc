@@ -20,7 +20,9 @@ discs' edges read whole. Last, the classifier judges the disc's masked face — 
 10 px inside the band's inner edge (the face's own edge, both cameras),
 grey outside — cut exactly as its training crops were
 (`vision/disc_cls.yaml`; until the face model is trained, run with the
-classifier on Ignore). Every disc's measured dent, offset and
+classifier on Ignore). Chip and concentric have an Ignore too: an ignored
+check is skipped, and the circles are looked for only while a check
+uses them. Every disc's measured dent, offset and
 edge ÷ box ratio are in the records sheet, and the pendant's **Last
 inspection** card shows the latest verdict on its own frame — the
 detector's box, the two circles, a close-up of the edge's deepest dent, the face the classifier sees — the

@@ -239,9 +239,11 @@ CLS_MODE           = "medium"
 #                   cameras. Measured: bottom, good discs 1.4–4.5 px; top
 #                   (89 discs, unlabelled, 2026-10-23) 0.1–7.7 px. No
 #                   off-centre disc measured yet — tighten once one is.
-# high is the strictest (catches the most), low the most lenient.
-CHIP_MODES         = {"high": 3.0, "medium": 3.5, "low": 5.0}
-OFFSET_MODES       = {"high": 5, "medium": 8, "low": 12}
+# high is the strictest (catches the most), low the most lenient; ignore
+# skips the check, as the classifier's (None: no threshold). The circles
+# are looked for only while a check uses them (_inspect).
+CHIP_MODES         = {"high": 3.0, "medium": 3.5, "low": 5.0, "ignore": None}
+OFFSET_MODES       = {"high": 5, "medium": 8, "low": 12, "ignore": None}
 RING_CHIP_MODE     = "medium"
 RING_CHIP_PX       = CHIP_MODES[RING_CHIP_MODE]
 RING_OFFSET_MODE   = "medium"
@@ -502,32 +504,38 @@ def _face_roi(circle):
             "crop": True}
 
 
-def _judge(action, cam, outer, inner, box):
+def _judge(action, outer, inner, box, chip, centred, face):
     """A camera's verdict on its circles: ``(why, m, stage)`` — why "" when
     they pass, else what failed it; m the measurements for the records
     sheet; stage the check that failed (circles / chip / concentric, None
-    on a pass) — the inspection card's last tile that ran. The first that
-    fails decides:
+    on a pass) — the inspection card's last tile that ran. ``chip`` /
+    ``centred`` / ``face``: which checks this run makes — the chip, the
+    centres, the classifier (its face is cut inside the inner edge). The
+    first that fails decides:
       1. the disc's edge found (a circle the disc's size)
-      2. (``chip`` cameras) the edge unchipped — its deepest dent at most
+      2. (``chip``) the edge unchipped — its deepest dent at most
          RING_CHIP_PX. Before the centres: a chip or a break pulls the fits sideways, so
          a broken disc also reads off-centre, and the chip is the cause
-      3. the band's inner edge found, and the two centres
-         at most RING_OFFSET_PX apart — concentric"""
+      3. (``centred`` or ``face``) the band's inner edge found
+      4. (``centred``) the two centres at most RING_OFFSET_PX apart —
+         concentric"""
     if outer is None:
         return "no edge", {}, "circles"
     m = {"ring_box_ratio": round(_diameter(outer["corners"]) / _diameter(box), 3)}
     say = f"ring: edge {_diameter(outer['corners']):.0f} px"
-    if cam["chip"]:
+    if chip:
         m.update(ring_dent_px=outer["dent"], ring_dent_at=outer["dent_at"])
         say += (f", deepest dent {m['ring_dent_px']:.1f} px at {m['ring_dent_at']}° "
                 f"(max {RING_CHIP_PX:g}, {RING_CHIP_MODE})")
         if m["ring_dent_px"] > RING_CHIP_PX:
             action.ctx.runtime.step(say)
             return "chip", m, "chip"
-    if inner is None:
+    if inner is None and (centred or face):
         action.ctx.runtime.step(say)
         return "no inner edge", m, "concentric"
+    if not centred:
+        action.ctx.runtime.step(f"{say}, centres ignored")
+        return "", m, None
     offset = math.dist(outer["center"], inner["center"])
     m["ring_offset_px"] = round(offset, 1)
     action.ctx.runtime.step(f"{say}, inner {_diameter(inner['corners']):.0f} px, offset {offset:.1f} px "
@@ -597,8 +605,10 @@ _CARD = _CardWorker()
 
 def _inspect(action, cam, disc):
     """One camera's check (STATION / ROBOT): the detector; the band's
-    circles on its box (_circles), judged (_judge); then —
-    unless the classifier is ignored — the classifier on the disc's face
+    circles on its box (_circles), judged (_judge) — the checks the run does
+    not ignore; the circles not looked for at all when every check that
+    uses them is ignored; then — unless the classifier is ignored — the
+    classifier on the disc's face
     (_face_roi): the masked circle its model is trained on, inside the
     band's inner edge. Returns
     ``(v, why, m)``: v ``"pass"`` /
@@ -606,8 +616,16 @@ def _inspect(action, cam, disc):
     None when a read failed (declarative retry: the caller returns False,
     the operator recovers). Every verdict also goes to the pendant's
     inspection card (_CARD)."""
-    card = {"cam": cam["name"], "disc": disc + 1, "chip": cam["chip"],
-            "dent_max": RING_CHIP_PX if cam["chip"] else None, "off_max": RING_OFFSET_PX}
+    # the checks this run makes (an ignored one's threshold is None): the
+    # chip on a ``chip`` camera, the centres, the classifier; the circles
+    # are looked for only if one of them uses them
+    threshold = CLS_MODES[CLS_MODE]
+    chip, centred = cam["chip"] and RING_CHIP_PX is not None, RING_OFFSET_PX is not None
+    ignored = (["chip"] if cam["chip"] and not chip else []) + ([] if centred else ["concentric"]) + \
+              ([] if threshold is not None else ["classifier"])
+    card = {"cam": cam["name"], "disc": disc + 1, "chip": cam["chip"], "ignored": ignored,
+            "circles": chip or centred or threshold is not None,
+            "dent_max": RING_CHIP_PX if chip else None, "off_max": RING_OFFSET_PX if centred else None}
 
     def verdict(v, why, m, alias, failed_at=None):
         # failed_at: the check the disc stopped at (detector / circles /
@@ -627,23 +645,26 @@ def _inspect(action, cam, disc):
     xs = [c[0] for c in box]; ys = [c[1] for c in box]
     card["det"] = {"conf": round(best.get("conf", 0), 2),
                    "box": [round(v, 1) for v in (min(xs), min(ys), max(xs), max(ys))]}
+    if not card["circles"]:
+        action.ctx.runtime.step(f"{cam['name']}: chip, centres and classifier ignored, pass")
+        card["cls"] = {"circle": None, "state": "off"}
+        return verdict("pass", "", {}, cam["od"])
     circles = _circles(action, cam, box)
     if circles is None:
         return None
     outer, inner = circles
     card.update(outer=_circle(outer), inner=_circle(inner))
     frame = cam["ring"]                    # the detection whose frame the card is drawn on
-    why, m, stage = _judge(action, cam, outer, inner, box)
+    why, m, stage = _judge(action, outer, inner, box, chip, centred, threshold is not None)
     if why:
         return verdict("fail", f"{cam['name']}: {why}", m, frame, stage)
-    # the face the classifier is handed: the band's inner edge (found:
-    # _judge passed)
+    # the face the classifier is handed: the band's inner edge (found when
+    # the classifier is on: _judge passed) — and the classifier's tile:
+    # that face, and its state until it speaks, off when ignored
     face = inner
-    threshold = CLS_MODES[CLS_MODE]
-    # the classifier's tile: that face, and its state until it speaks — off
-    # when ignored
-    card["cls"] = {"circle": [round(face["center"][0], 1), round(face["center"][1], 1),
-                              round(_diameter(face["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
+    card["cls"] = {"circle": None if face is None else
+                   [round(face["center"][0], 1), round(face["center"][1], 1),
+                    round(_diameter(face["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
     if threshold is None:
         action.ctx.runtime.step(f"{cam['cls']}: classifier ignored, pass")
         return verdict("pass", "", m, frame)

@@ -61,13 +61,16 @@ const CLS_MODES = [
 ];
 // The ring's two sensitivities — the ``ring_chip`` / ``ring_offset``
 // kwargs. Mirror CHIP_MODES / OFFSET_MODES in actions.py and say the
-// number; left to right, least to most strict, as the classifier's.
+// number; left to right, least to most strict, as the classifier's —
+// Ignore first, as its.
 const CHIP_MODES = [
+  { key: "ignore", label: "Ignore", hint: "no chip check — a chipped disc is not failed for it" },
   { key: "low",    label: "Low",    hint: "a notch in the band up to 5 px deep passes — lets small chips through" },
   { key: "medium", label: "Medium", hint: "a notch deeper than 3.5 px is a chip — good discs measured 1.1–3.1 px, chips 3.6–15 px" },
   { key: "high",   label: "High",   hint: "a notch deeper than 3 px is a chip — close to a good disc's 3.1 px" },
 ];
 const OFFSET_MODES = [
+  { key: "ignore", label: "Ignore", hint: "no centre check — an off-centre disc is not failed for it" },
   { key: "low",    label: "Low",    hint: "the band's two centres at most 12 px apart" },
   { key: "medium", label: "Medium", hint: "at most 8 px apart — measured: bottom 1.4–4.5 px on good discs, top 0.1–7.7 px" },
   { key: "high",   label: "High",   hint: "at most 5 px apart — close to a good disc's 4.5 px on the bottom" },
