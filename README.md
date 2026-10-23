@@ -7,18 +7,18 @@ BK 879B, then dropped into a PASS or FAIL holder by the window in
 `Sort` (`C_MIN..C_MAX`, `actions.py`). A FLAT BT project: one disc
 through the bench at a time, `ROUTE` at the bottom of `actions.py`.
 
-Both cameras run one flow (`_inspect`): the detector finds the disc;
-the disc's edge is found on its box (`vision/disc_ring.yaml` on the
-station camera, through the yellow band; `vision/disc_ring_top.yaml` on
-the robot camera, plain edges — no band there) and must be whole: its
-worst 10° sector showing enough of its outline, the run's
-`ring_coverage` sensitivity (a chip or a break pulls it down). The
-station camera also finds the band's inner edge, and the two must be
-concentric — the run's `ring_offset` sensitivity. Last, the classifier
-judges the disc's masked face — a circle 10 px inside the band's inner
-edge (the disc's edge on the robot camera), grey outside — cut exactly as
-its training crops were (`vision/disc_cls.yaml`; until the face model
-is trained, run with the classifier on Ignore). Every disc's measured coverage, offset and
+Both cameras run one flow (`_inspect`): the detector finds the disc.
+On the station camera the disc's edge is then found on its box, through
+the yellow band (`vision/disc_ring.yaml`), and must be whole: its worst
+10° sector showing enough of its outline, the run's `ring_coverage`
+sensitivity (a chip or a break pulls it down). The band's inner edge is
+found too, and the two must be concentric — the run's `ring_offset`
+sensitivity. The robot camera runs no circles (they were not accurate
+there). Last, the classifier judges the disc's masked face — a circle
+10 px inside the band's inner edge (inside the detector's box on the
+robot camera), grey outside — cut exactly as its training crops were
+(`vision/disc_cls.yaml`; until the face model is trained, run with the
+classifier on Ignore). Every disc's measured coverage, offset and
 edge ÷ box ratio are in the records sheet, and the pendant's **Last
 inspection** card shows the latest verdict on its own frame — the
 detector's box, the two circles, the edge's 36 sectors, the face the classifier sees — the
@@ -107,13 +107,12 @@ tab.
 | config | model | type | for |
 |---|---|---|---|
 | `disc_od.yaml` | `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
-| `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, 10° coverage) | the station camera's circles: concentric, no chip |
-| `disc_ring_top.yaml` | — | `elp`, plain edges (no band on the anode) | the robot camera's circles: no chip |
+| `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, 10° coverage) | the station camera's circles: chip, concentric |
 | `disc_cls.yaml` | the face model (the old `disc_pass_fail_cropped.pkl` until it is trained) | `cls` — pass / fail on the masked face | the visual verdict, both cameras, last — drop the new weights here |
 
-`recipes.j2` registers six detections — `bottom_od` / `bottom_ring` /
-`bottom_cls` on the station camera, `top_od` / `top_ring` / `top_cls`
-on the robot camera — one Inspector recipe each. Each detection is
+`recipes.j2` registers five detections — `bottom_od` / `bottom_ring` /
+`bottom_cls` on the station camera, `top_od` / `top_cls` on the robot
+camera — one Inspector recipe each. Each detection is
 `detection_preset: {config: vision/disc_od.yaml}` — a relative path is
 relative to the file it is written in: `config:` to recipes.j2, the
 paths inside the config to `vision/`; the client ships the model's bytes to the vision unit at

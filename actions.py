@@ -45,9 +45,9 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
    5. Reject        (fail only) drop the held disc into the fail column.
    6. PlaceAnode    place the disc on the anode's "place" anchor, stand
                     where the robot camera sees it.
-   7. InspectTop    robot camera: the same flow — detector, circles (the
-                    edge judged for a chip; no band, so no concentricity),
-                    classifier. pass → the
+   7. InspectTop    robot camera: the detector, then the classifier on
+                    the face cut inside the detector's box — no circles
+                    (they were not accurate on this camera). pass → the
                     measurement; fail → skip it, PickAnode takes the disc
                     straight to the fail column. No disc seen on the anode
                     is a fail too, never a pause.
@@ -206,12 +206,13 @@ def _schema_default(key):
 
 # Visual inspection: the detector runs on the WHOLE frame (no ROI — it
 # finds the disc itself); the circles are then found on the detector's box
-# grown by this many px (roi.offset on the box corners), cropped.
+# grown by this many px (roi.offset on the box corners), cropped — the
+# station camera's; the robot camera runs none.
 CLS_ROI_OFFSET     = 100
 # The classifier sees the disc's FACE: a 72-point circle FACE_MARGIN px
-# inside the face's circle (the band's inner edge, or the disc's edge on
-# the robot camera — STATION / ROBOT ``face``), grey outside, cropped to
-# its box (_face_roi). Exactly how the face model's training crops were
+# inside the face's circle (the band's inner edge on the station camera,
+# the detector's box on the robot camera — _inspect), grey outside,
+# cropped to its box (_face_roi). Exactly how the face model's training crops were
 # cut (the disc_faces set: same circles, same margin, the same vision ROI)
 # — change one, change both.
 FACE_MARGIN        = 10
@@ -225,10 +226,10 @@ FACE_MARGIN        = 10
 CLS_MODES          = {"high": 0.75, "medium": 0.50, "low": 0.25, "ignore": None}
 CLS_MODE           = "medium"
 # The RING — the checks on the disc's circles, after the detector
-# (_judge; vision/disc_ring*.yaml find them, each with a conf: its worst
+# (_judge; vision/disc_ring.yaml finds them, each with a conf: its worst
 # 10° sector's share of its outline the image shows). Two SENSITIVITIES,
 # run parameters like the classifier's (hmi/default.j2, the setup
-# screen), written by setup():
+# screen), written by setup(). The station camera only:
 #   COVERAGE_MODES  the least the disc's edge may show in its worst
 #                   sector — a chip or a break pulls it down. Measured: good
 #                   discs 0.70–1.00 (a nick in the band 0.70), chips and
@@ -244,8 +245,8 @@ RING_COVERAGE_MIN  = COVERAGE_MODES[RING_COVERAGE_MODE]
 RING_OFFSET_MODE   = "medium"
 RING_OFFSET_PX     = OFFSET_MODES[RING_OFFSET_MODE]
 # RING_BOX_TOL: the disc's edge is a circle within this share of the
-# detector's box size (STATION / ROBOT ``edge`` picks which one) — a
-# speck, the centre hole, anything far off the disc's size is ignored.
+# detector's box size (the largest of them — _circles) — a speck, the
+# centre hole, anything far off the disc's size is ignored.
 RING_BOX_TOL       = 0.10
 # The band's inner circle, as a share of the outer one: meaningfully
 # smaller (a good band is ~4 % of the diameter — a near-copy of the outer
@@ -423,26 +424,16 @@ def _detect(action, od_alias):
     return best
 
 
-# The two cameras, one flow (_inspect): the detector, the circles on its
-# box, the classifier on the disc's face. ``band``: the camera sees the
-# yellow band, so the band's inner edge is found and the two centres
-# judged (concentric); the robot camera (a dark holder, no band) judges
-# the disc's edge for a chip only.
-# ``edge``: which circle near the box's size is the disc's edge, by what
-# each camera sees —
-#   "largest"  the station: its colour mask leaves the band alone, so the
-#              circles near the box's size are the band's two edges, 4 %
-#              apart — closer than the box can tell; the outer is the larger
-#   "closest"  the robot camera: no mask, so the holder's recess rings
-#              (5–12 % larger) are there too; the disc's edge is the one
-#              nearest the box's size
-# ``face``: the circle the face is cut inside — the band's inner edge on
-# the station camera (the grey face, no band in it), the disc's edge on
-# the robot camera (no band there).
-STATION = {"name": "bottom camera", "od": "inspector", "ring": "inspector_ring",
-           "cls": "inspector_cls", "band": True, "edge": "largest", "face": "inner"}
-ROBOT   = {"name": "top camera", "od": "inspector_robot", "ring": "inspector_robot_ring",
-           "cls": "inspector_robot_cls", "band": False, "edge": "closest", "face": "outer"}
+# The two cameras, one flow (_inspect): the detector; the circles on its
+# box (``ring``) — the station camera only; the classifier on the disc's
+# face. The station camera sees the yellow band: the disc's edge is judged
+# for a chip, the band's two edges for concentricity, and the face is cut
+# inside the band's inner edge (the grey face, no band in it). The robot
+# camera's circles were not accurate (a dark holder, its recess rings
+# around the disc): it runs none, and the face is cut inside the
+# detector's box — its mean side the diameter.
+STATION = {"name": "bottom camera", "od": "inspector", "ring": "inspector_ring", "cls": "inspector_cls"}
+ROBOT   = {"name": "top camera", "od": "inspector_robot", "ring": None, "cls": "inspector_robot_cls"}
 
 
 def _diameter(corners):
@@ -451,8 +442,8 @@ def _diameter(corners):
 
 
 def _box_circle(box):
-    """The detector's box as a circle result — its centre is where the sim
-    ring is drawn."""
+    """The detector's box as a circle result — the robot camera's face is
+    cut inside it; its centre is where the sim ring is drawn."""
     return {"center": [sum(c[0] for c in box) / 4, sum(c[1] for c in box) / 4], "corners": box}
 
 
@@ -461,11 +452,13 @@ def _circles(action, cam, box):
     cropped), sized by the box — only circles within RING_BOX_TOL of its
     size can be the disc's edge (a speck, the centre hole never are).
     Returns ``(outer, inner)``, or None when the read failed:
-      outer  the disc's edge — of those, the largest or the closest in
-             size to the box, by the camera's ``edge``; None when none
+      outer  the disc's edge — the largest of those: the colour mask
+             leaves the band alone, so the circles near the box's size
+             are the band's two edges, 4 % apart — closer than the box
+             can tell; the outer is the larger. None when none
       inner  the band's inner edge: the largest circle between
              RING_INNER_MIN and RING_INNER_MAX of the outer — None when
-             there is none (the robot camera sees no band)
+             there is none
     In sim the ring is a good one, sized to the detector's sim box."""
     d_box = _diameter(box)
     cx, cy = _box_circle(box)["center"]
@@ -481,10 +474,7 @@ def _circles(action, cam, box):
     if found is None:
         return None
     sized = [c for c in found if abs(_diameter(c["corners"]) - d_box) <= RING_BOX_TOL * d_box]
-    if cam["edge"] == "largest":
-        outer = max(sized, key=lambda c: _diameter(c["corners"]), default=None)
-    else:
-        outer = min(sized, key=lambda c: abs(_diameter(c["corners"]) - d_box), default=None)
+    outer = max(sized, key=lambda c: _diameter(c["corners"]), default=None)
     if outer is None:
         return None, None
     d_out = _diameter(outer["corners"])
@@ -503,8 +493,8 @@ def _face_roi(circle):
             "crop": True}
 
 
-def _judge(action, cam, outer, inner, box):
-    """A camera's verdict on its circles: ``(why, m, stage)`` — why "" when
+def _judge(action, outer, inner, box):
+    """The station camera's verdict on its circles: ``(why, m, stage)`` — why "" when
     they pass, else what failed it; m the measurements for the records
     sheet; stage the check that failed (circles / chip / concentric, None
     on a pass) — the inspection card's last tile that ran. The first that
@@ -513,29 +503,26 @@ def _judge(action, cam, outer, inner, box):
       2. the edge whole — its worst 10° sector at least RING_COVERAGE_MIN.
          Before the centres: a chip or a break pulls the fits sideways, so
          a broken disc also reads off-centre, and the chip is the cause
-      3. (band cameras) the band's inner edge found, and the two centres
+      3. the band's inner edge found, and the two centres
          at most RING_OFFSET_PX apart — concentric"""
     if outer is None:
-        return "ring: no circle the disc's size", {}, "circles"
+        return "no edge", {}, "circles"
     m = {"ring_box_ratio": round(_diameter(outer["corners"]) / _diameter(box), 3),
          "ring_coverage": round(outer.get("conf", 1), 3)}
     say = (f"ring: edge {_diameter(outer['corners']):.0f} px, coverage {m['ring_coverage']:.2f} "
            f"(min {RING_COVERAGE_MIN:g}, {RING_COVERAGE_MODE})")
     if m["ring_coverage"] < RING_COVERAGE_MIN:
         action.ctx.runtime.step(say)
-        return f"ring: chip, coverage {m['ring_coverage']:.2f}", m, "chip"
-    if not cam["band"]:
-        action.ctx.runtime.step(say)
-        return "", m, None
+        return "chip", m, "chip"
     if inner is None:
         action.ctx.runtime.step(say)
-        return "ring: no inner circle", m, "concentric"
+        return "no inner edge", m, "concentric"
     offset = math.dist(outer["center"], inner["center"])
     m["ring_offset_px"] = round(offset, 1)
     action.ctx.runtime.step(f"{say}, inner {_diameter(inner['corners']):.0f} px, offset {offset:.1f} px "
                             f"(max {RING_OFFSET_PX:g}, {RING_OFFSET_MODE})")
     if offset > RING_OFFSET_PX:
-        return f"ring: off-centre {offset:.1f} px", m, "concentric"
+        return "off-centre", m, "concentric"
     return "", m, None
 
 
@@ -598,17 +585,18 @@ _CARD = _CardWorker()
 
 
 def _inspect(action, cam, disc):
-    """One camera's check (STATION / ROBOT): the detector; the circles on
-    its box (_circles), judged (_judge); then — unless the classifier is
-    ignored — the classifier on the disc's face (_face_roi): the masked
-    circle its model is trained on. Returns
+    """One camera's check (STATION / ROBOT): the detector; on the station
+    camera the circles on its box (_circles), judged (_judge); then —
+    unless the classifier is ignored — the classifier on the disc's face
+    (_face_roi): the masked circle its model is trained on, inside the
+    band's inner edge or (robot camera) the detector's box. Returns
     ``(v, why, m)``: v ``"pass"`` /
     ``"fail"`` / ``"empty"``, why the fail, m the ring's measurements — or
     None when a read failed (declarative retry: the caller returns False,
     the operator recovers). Every verdict also goes to the pendant's
     inspection card (_CARD)."""
-    card = {"cam": cam["name"], "disc": disc + 1, "band": cam["band"],
-            "cov_min": RING_COVERAGE_MIN, "off_max": RING_OFFSET_PX if cam["band"] else None}
+    card = {"cam": cam["name"], "disc": disc + 1, "ring": cam["ring"] is not None,
+            "cov_min": RING_COVERAGE_MIN, "off_max": RING_OFFSET_PX}
 
     def verdict(v, why, m, alias, failed_at=None):
         # failed_at: the check the disc stopped at (detector / circles /
@@ -628,28 +616,29 @@ def _inspect(action, cam, disc):
     xs = [c[0] for c in box]; ys = [c[1] for c in box]
     card["det"] = {"conf": round(best.get("conf", 0), 2),
                    "box": [round(v, 1) for v in (min(xs), min(ys), max(xs), max(ys))]}
-    circles = _circles(action, cam, box)
-    if circles is None:
-        return None
-    outer, inner = circles
-    card.update(outer=_circle(outer), inner=_circle(inner),
-                sectors=outer.get("sectors") if outer else None)
+    # the face the classifier is handed, and the detection whose frame the
+    # card is drawn on: the detector's box on a camera without circles
+    m, face, frame = {}, _box_circle(box), cam["od"]
+    if cam["ring"]:
+        circles = _circles(action, cam, box)
+        if circles is None:
+            return None
+        outer, inner = circles
+        card.update(outer=_circle(outer), inner=_circle(inner),
+                    sectors=outer.get("sectors") if outer else None)
+        # the band's inner edge — a disc without one fails _judge
+        face, frame = inner, cam["ring"]
+        why, m, stage = _judge(action, outer, inner, box)
+        if why:
+            return verdict("fail", f"{cam['name']}: {why}", m, frame, stage)
     threshold = CLS_MODES[CLS_MODE]
-    # the face the classifier is handed — the camera's ``face`` circle; the
-    # checks before it make sure it exists (a disc without one fails there)
-    face = inner if cam["face"] == "inner" else outer
     # the classifier's tile: that face, and its state until it speaks — off
-    # when ignored (a disc that fails before it is drawn as not run, by
-    # failed_at)
-    card["cls"] = {"circle": None if face is None else
-                   [round(face["center"][0], 1), round(face["center"][1], 1),
-                    round(_diameter(face["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
-    why, m, stage = _judge(action, cam, outer, inner, box)
-    if why:
-        return verdict("fail", f"{cam['name']}: {why}", m, cam["ring"], stage)
+    # when ignored
+    card["cls"] = {"circle": [round(face["center"][0], 1), round(face["center"][1], 1),
+                              round(_diameter(face["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
     if threshold is None:
         action.ctx.runtime.step(f"{cam['cls']}: classifier ignored, pass")
-        return verdict("pass", "", m, cam["ring"])
+        return verdict("pass", "", m, frame)
     res = action.ctx.recipes[cam["cls"]].detect(roi=_face_roi(face), sim_return=[{"cls": "pass", "conf": 0.99}])
     if res is None:
         return None
@@ -658,7 +647,7 @@ def _inspect(action, cam, disc):
         f"{cam['cls']}: the face, {_diameter(face['corners']) - 2 * FACE_MARGIN:.0f} px across, "
         f"pass {_pass_prob(res):.2f} vs {threshold:.2f} ({CLS_MODE}) -> {v}")
     card["cls"].update(state=v, p=round(_pass_prob(res), 2), min=threshold)
-    return verdict(v, "" if v == "pass" else f"{cam['name']}: classifier fail", m, cam["ring"],
+    return verdict(v, "" if v == "pass" else f"{cam['name']}: classifier fail", m, frame,
                    None if v == "pass" else "classifier")
 
 
@@ -1193,7 +1182,7 @@ class InspectBottom(Action):
     concentric, whole), then CLASSIFY its masked face (_face_roi)
     (_inspect, STATION). A sensing action with two outcomes
     (bt-framework-guide §7): ``pass`` (default) and ``fail``; the fail's
-    reason (``bottom camera: ring: off-centre 6.2 px`` …) and the ring's
+    reason (``bottom camera: off-centre`` …) and the ring's
     measurements go into the disc's audit row.
 
     A disc the detector does not see is a FAIL, not a pause and not an
@@ -1308,9 +1297,9 @@ class PlaceAnode(Action):
 
 class InspectTop(Action):
     """Robot camera: the same flow on the seated disc (_inspect, ROBOT) —
-    detector, circles, classifier — before the measurement. Its
-    circles judge the disc's edge for a chip; no band here, so no
-    concentricity. ``pass`` (default) → measure; ``fail`` → the
+    detector, then the classifier on the face cut inside the detector's
+    box — before the measurement. No circles: they were not accurate on
+    this camera. ``pass`` (default) → measure; ``fail`` → the
     measurement is skipped and PickAnode takes it to the fail column.
     No disc seen on the anode is a fail too: PickAnode re-grips whatever
     is there and Sort drops it in the fail column, no pause.

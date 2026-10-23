@@ -83,8 +83,8 @@ One row per disc in `records/<run>/records.csv`:
 |---|---|---|
 | `result` | `pass` / `fail` | which kind of holder |
 | `out` | `Pass 1 A3`, `Fail 1 A5`, `Fail 1 A6 (empty hand)` | holder and position; `(empty hand)` = nothing was dropped or counted |
-| `reason` | `C = 4.7e-07`, `bottom camera: ring: off-centre 6.2 px`, `bottom camera: ring: chip, outer circle 0.33`, `bottom camera: classifier fail`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
-| `ring_coverage`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (`top_ring_coverage`, `top_ring_box_ratio` the robot camera's) — choose the run's sensitivities from these |
+| `reason` | `C = 4.7e-07`, `bottom camera: chip`, `bottom camera: off-centre`, `bottom camera: classifier fail`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
+| `ring_coverage`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (the robot camera runs none) — choose the run's sensitivities from these |
 | `c_f` | farads | the reading, when the disc was measured |
 
 The pendant shows the same: a count in every OUT position, the pass /

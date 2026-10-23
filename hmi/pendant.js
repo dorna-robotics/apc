@@ -26,8 +26,10 @@
 //   last_result  "pass" | "fail"
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
-//                [cx, cy, r], sectors [36], coverage, cov_min, offset,
-//                off_max, cls {circle, state, p, min}, img, w, h} — img an
+//                [cx, cy, r], sectors [36], ring, coverage, cov_min, offset,
+//                off_max, cls {circle, state, p, min}, img, w, h} — ring
+//                false: a camera without circles (the robot camera), its
+//                Circles and Chip tiles not checked; img an
 //                rt.asset path (api.url makes it loadable), w × h the
 //                frame it is in; absent in sim. Drawn as the inspection
 //                card under the columns: four tiles over the one frame.
@@ -485,12 +487,13 @@ function inspectionHtml(c) {
       ${tag ? `<div class="tag">${tag}</div>` : ""}</div>
     <div class="cap"><span class="n">${n}</span>${title}<span class="st ${st[0]}">${st[1]}</span></div></div>`;
   // A tile whose check never ran: no picture — a quiet hatched panel, the
-  // tile's own outline, and where the disc stopped.
+  // tile's own outline, and why: where the disc stopped, or (c.ring false)
+  // that this camera has no such check.
   const stoppedAt = { detector: "Detector", circles: "Circles", chip: "Chip", concentric: "Circles",
                       classifier: "Classifier" }[at] || "";
-  const idle = (n, title) => `<div class="tile"><div class="frame ph"><div class="ph-in">${PH_ICON[n]}
-      <b>Not run</b><span>Stopped at ${esc(stoppedAt)}</span></div></div>
-    <div class="cap"><span class="n">${n}</span>${title}<span class="st off">not run</span></div></div>`;
+  const idle = (n, title, head = "Not run", why = `Stopped at ${esc(stoppedAt)}`) => `<div class="tile">
+      <div class="frame ph"><div class="ph-in">${PH_ICON[n]}<b>${head}</b><span>${why}</span></div></div>
+    <div class="cap"><span class="n">${n}</span>${title}<span class="st off">${head.toLowerCase()}</span></div></div>`;
   return `<div class="card insp">
     <div class="ihead"><h3>Last inspection</h3>
       <span class="who">${esc(cap(c.cam))} · disc ${esc(c.disc)}</span><span class="grow"></span>
@@ -499,17 +502,17 @@ function inspectionHtml(c) {
     <div class="tiles">
       ${tile(1, "Detector", t1, det ? `disc <b>${det.conf.toFixed(2)}</b>` : "no disc",
              det ? ["ok", "found"] : ["bad", "none"])}
-      ${!ran[2] ? idle(2, "Circles") : tile(2, "Circles", t2,
+      ${c.ring === false ? idle(2, "Circles", "Not checked", "No circle check on this camera")
+             : !ran[2] ? idle(2, "Circles") : tile(2, "Circles", t2,
              !o ? "no circle the disc's size"
              : off != null ? `offset <b>${off.toFixed(1)}</b> px · max ${offMax}`
-             : !c.band ? `edge <b>${Math.round(o[2] * 2)}</b> px · no band`
              : at === "chip" ? `edge <b>${Math.round(o[2] * 2)}</b> px · centres not checked`
              : "no inner circle",
              !o ? ["bad", "none"]
              : off != null ? (off <= offMax ? ["ok", "concentric"] : ["bad", "off-centre"])
-             : !c.band ? ["off", "edge only"]
              : at === "chip" ? ["off", "not checked"] : ["bad", "no inner"])}
-      ${!ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `coverage <b>${cov.toFixed(2)}</b> · min ${covMin.toFixed(2)}`,
+      ${c.ring === false ? idle(3, "Chip", "Not checked", "No chip check on this camera")
+             : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `coverage <b>${cov.toFixed(2)}</b> · min ${covMin.toFixed(2)}`,
              cov >= covMin ? ["ok", "whole"] : ["bad", "chip"])}
       ${!ran[4] ? idle(4, "Classifier") : tile(4, "Classifier", t4,
              cs === "off" ? "classifier ignored" : `pass <b>${num(c.cls.p).toFixed(2)}</b> · min ${num(c.cls.min).toFixed(2)}`,

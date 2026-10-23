@@ -6,7 +6,7 @@
 {%- set hmp = "[true, smove]" -%}
 {#- Every detection's settings live in vision/ (beside this file), one
     config per model with the model beside it: vision/disc_od.yaml,
-    vision/disc_ring.yaml, vision/disc_ring_top.yaml, vision/disc_cls.yaml.
+    vision/disc_ring.yaml, vision/disc_cls.yaml.
     A relative path is relative to the file it is
     written in — config: to this file, the paths inside a config to
     vision/. -#}
@@ -56,16 +56,16 @@ disc_out_bad_1:
   kwargs: {component: adapter_disc_out_bad_1, ref_joints: [-42.3, -14.4, -78.4, 0.0, 2.8, 137.7, 162.5, 0.0], left_approach: true, base_distance: 250, rail_step: 5, rail_span: 0, padding: 35, speed_factor: {{ sf }}, has_motion_plan: {{ hmp }}}
 
 # ── Stations ────────────────────────────────────────────────────────
-# Two models per camera, so TWO Inspector recipes per camera, each owning
-# one named detection on the same camera (Inspector.detection_name):
+# One Inspector recipe per detection, each owning one named detection on
+# its camera (Inspector.detection_name):
 #   *      — the disc DETECTOR (od). Owns the motion too: present() on
 #            the station form. Runs on the WHOLE frame — no ROI.
 #   *_ring — the disc's CIRCLES (elp) on the detector's box grown by
-#            CLS_ROI_OFFSET px, cropped: they judge the disc's edge for a
-#            chip, and the station camera's its band for concentricity.
+#            CLS_ROI_OFFSET px, cropped: the disc's edge judged for a
+#            chip, the band's two edges for concentricity. The station
+#            camera only — on the robot camera they were not accurate.
 #   *_cls  — the pass/fail CLASSIFIER (cls), the last check: on the
-#            detector's box grown by CLS_ROI_OFFSET px, cropped.
-#            Never moves.
+#            disc's masked face (actions.py _face_roi). Never moves.
 # The station pair share the station's solved pose (same ref_joints — the
 # IK cache answers the second one).
 # Every detection setting (model, conf, frames_avg, display) is in its
@@ -93,12 +93,8 @@ inspector_robot:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_robot_1, detection_name: top_od, detection_preset: {config: vision/disc_od.yaml}, speed_factor: {{ sf }}}
 
-# Its circles (vision/disc_ring_top.yaml — no band here, plain edges) and
-# the classifier (vision/disc_cls.yaml, the station's own config).
-inspector_robot_ring:
-  class: workspace.recipes.inspector.Inspector
-  kwargs: {component: inspection_poe_robot_1, detection_name: top_ring, detection_preset: {config: vision/disc_ring_top.yaml}, speed_factor: {{ sf }}}
-
+# Its classifier (vision/disc_cls.yaml, the station's own config) — no
+# circles here: the face is cut inside the detector's box.
 inspector_robot_cls:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_robot_1, detection_name: top_cls, detection_preset: {config: vision/disc_cls.yaml}, speed_factor: {{ sf }}}
