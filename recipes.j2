@@ -95,7 +95,7 @@ inspector_robot:
 
 # Its band's two circles (vision/disc_ring_top.yaml — ring, no chip check)
 # and the classifier (vision/disc_cls.yaml, the station's own config; the
-# face is cut inside the detector's box).
+# face is cut inside the band's inner edge, as the station's).
 inspector_robot_ring:
   class: workspace.recipes.inspector.Inspector
   kwargs: {component: inspection_poe_robot_1, detection_name: top_ring, detection_preset: {config: vision/disc_ring_top.yaml}, speed_factor: {{ sf }}}

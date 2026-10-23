@@ -17,8 +17,8 @@ sensitivity. The robot camera measures its thin band's two circles too
 (`vision/disc_ring_top.yaml`, `ring`) and judges them concentric by the
 same `ring_offset` — no chip check there: from the top the chipped
 discs' edges read whole. Last, the classifier judges the disc's masked face — a circle
-10 px inside the band's inner edge (inside the detector's box on the
-robot camera), grey outside — cut exactly as its training crops were
+10 px inside the band's inner edge (the face's own edge, both cameras),
+grey outside — cut exactly as its training crops were
 (`vision/disc_cls.yaml`; until the face model is trained, run with the
 classifier on Ignore). Every disc's measured dent, offset and
 edge ÷ box ratio are in the records sheet, and the pendant's **Last

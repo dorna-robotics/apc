@@ -1,8 +1,8 @@
 # The disc PASS / FAIL CLASSIFIER — recipes.j2 inspector_cls (bottom_cls,
 # station camera) and inspector_robot_cls (top_cls, robot camera), the
 # last check on both cameras: run on the disc's FACE — a circle
-# FACE_MARGIN px inside the band's inner edge (the detector's box on the
-# robot camera), grey outside, cropped (actions.py _face_roi), cut exactly as
+# FACE_MARGIN px inside the band's inner edge (the face's own edge, both
+# cameras), grey outside, cropped (actions.py _face_roi), cut exactly as
 # the face model's training crops were.
 #
 # THE MODEL. ``path`` below is the face model's weights: drop the trained

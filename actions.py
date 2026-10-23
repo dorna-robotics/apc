@@ -49,7 +49,7 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     circles (vision/disc_ring_top.yaml) — concentric
                     (ring_offset), no chip check (chips show from the
                     bottom) — then the classifier on the face cut inside
-                    the detector's box. pass → the
+                    the band's inner edge. pass → the
                     measurement; fail → skip it, PickAnode takes the disc
                     straight to the fail column. No disc seen on the anode
                     is a fail too, never a pause.
@@ -211,9 +211,8 @@ def _schema_default(key):
 # grown by this many px (roi.offset on the box corners), cropped.
 CLS_ROI_OFFSET     = 100
 # The classifier sees the disc's FACE: a 72-point circle FACE_MARGIN px
-# inside the face's circle (the band's inner edge on the station camera,
-# the detector's box on the robot camera — _inspect), grey outside,
-# cropped to its box (_face_roi). Exactly how the face model's training crops were
+# inside the band's inner edge (the face's own edge, both cameras —
+# _inspect), grey outside, cropped to its box (_face_roi). Exactly how the face model's training crops were
 # cut (the disc_faces set: same circles, same margin, the same vision ROI)
 # — change one, change both.
 FACE_MARGIN        = 10
@@ -436,15 +435,13 @@ def _detect(action, od_alias):
 # (concentric). ``chip``: the disc's edge is also judged for a chip — the
 # station camera, where the chips show (vision/disc_ring.yaml: elp + dent);
 # from the top the chipped discs' edges read whole, so the robot camera
-# measures centres only (vision/disc_ring_top.yaml: ring, no dent).
-# ``face``: where the classifier's face is cut — inside the band's inner
-# edge on the station camera (the grey face, no band in it), inside the
-# detector's box on the robot camera (its mean side the diameter), as each
-# camera's training crops were cut.
+# measures centres only (vision/disc_ring_top.yaml: ring, no dent). On
+# both, the classifier's face is cut inside the band's inner edge — the
+# face's own edge, no band in it.
 STATION = {"name": "bottom camera", "od": "inspector", "ring": "inspector_ring", "cls": "inspector_cls",
-           "chip": True, "face": "inner"}
+           "chip": True}
 ROBOT   = {"name": "top camera", "od": "inspector_robot", "ring": "inspector_robot_ring", "cls": "inspector_robot_cls",
-           "chip": False, "face": "box"}
+           "chip": False}
 
 
 def _diameter(corners):
@@ -453,8 +450,8 @@ def _diameter(corners):
 
 
 def _box_circle(box):
-    """The detector's box as a circle result — the robot camera's face is
-    cut inside it (``face``); its centre is where the sim ring is drawn."""
+    """The detector's box as a circle result — its centre is where the sim
+    ring is drawn."""
     return {"center": [sum(c[0] for c in box) / 4, sum(c[1] for c in box) / 4], "corners": box}
 
 
@@ -603,7 +600,7 @@ def _inspect(action, cam, disc):
     circles on its box (_circles), judged (_judge); then —
     unless the classifier is ignored — the classifier on the disc's face
     (_face_roi): the masked circle its model is trained on, inside the
-    band's inner edge or (robot camera) the detector's box. Returns
+    band's inner edge. Returns
     ``(v, why, m)``: v ``"pass"`` /
     ``"fail"`` / ``"empty"``, why the fail, m the ring's measurements — or
     None when a read failed (declarative retry: the caller returns False,
@@ -639,9 +636,9 @@ def _inspect(action, cam, disc):
     why, m, stage = _judge(action, cam, outer, inner, box)
     if why:
         return verdict("fail", f"{cam['name']}: {why}", m, frame, stage)
-    # the face the classifier is handed: the camera's ``face`` — the band's
-    # inner edge (found: _judge passed) or the detector's box
-    face = inner if cam["face"] == "inner" else _box_circle(box)
+    # the face the classifier is handed: the band's inner edge (found:
+    # _judge passed)
+    face = inner
     threshold = CLS_MODES[CLS_MODE]
     # the classifier's tile: that face, and its state until it speaks — off
     # when ignored
@@ -1310,7 +1307,7 @@ class InspectTop(Action):
     """Robot camera: the same flow on the seated disc (_inspect, ROBOT) —
     detector, the band's two circles judged concentric (no chip check:
     chips show from the bottom), then the classifier on the face cut
-    inside the detector's box — before the measurement. ``pass``
+    inside the band's inner edge — before the measurement. ``pass``
     (default) → measure; ``fail`` → the
     measurement is skipped and PickAnode takes it to the fail column.
     No disc seen on the anode is a fail too: PickAnode re-grips whatever
