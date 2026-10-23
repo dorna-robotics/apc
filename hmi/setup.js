@@ -290,7 +290,9 @@ export function benchState(api) {
                full: Number(initial(api, "stack_size", 0)) || 0,
                // the ring's two sensitivities (hmi/default.j2)
                ring_chip: pick(initial(api, "ring_chip", "medium"), CHIP_MODES),
-               ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES) };
+               ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES),
+               // keep each visual fail's picture in the run's records
+               save_fail_pictures: initial(api, "save_fail_pictures", false) === true };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
   const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
   if (CLS_MODES.some(m => m.key === c)) st.classifier = c;
@@ -498,6 +500,17 @@ function bodyHtml(st) {
         <div class="hint">${esc(OFFSET_MODES.find(m => m.key === st.ring_offset).hint)}</div>
       </div>
     </div>
+    <div class="card">
+      <h4>Fail pictures — keep each visual fail in the run's records</h4>
+      <div class="inner">
+        <div class="row seg">${[[false, "Off"], [true, "On"]].map(([v, l]) =>
+          `<button type="button" class="pos${st.save_fail_pictures === v ? " armed" : ""}" data-pics="${v}">${l}</button>`).join("")}
+        </div>
+        <div class="hint">${esc(st.save_fail_pictures
+          ? "each failed disc's picture and numbers go to records/<run>/fails/ — about 50–90 KB a disc"
+          : "nothing saved — the sheet still says why each disc failed")}</div>
+      </div>
+    </div>
   </div>`;
   }
   if (st.step === "check") {
@@ -569,6 +582,13 @@ function render(wrap, st) {
       render(wrap, st);
     };
   });
+  wrap.querySelectorAll("[data-pics]").forEach(b => {
+    b.onclick = () => {
+      if (frozen()) return;
+      st.save_fail_pictures = b.dataset.pics === "true";
+      render(wrap, st);
+    };
+  });
   wrap.querySelectorAll("[data-ring]").forEach(b => {
     b.onclick = () => {
       if (frozen()) return;
@@ -636,6 +656,7 @@ export default {
       classifier: _st.classifier,
       ring_chip: _st.ring_chip,
       ring_offset: _st.ring_offset,
+      save_fail_pictures: _st.save_fail_pictures,
     };
   },
 

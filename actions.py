@@ -128,8 +128,10 @@ together.
 
 from __future__ import annotations
 
+import json
 import math
 import os
+import queue
 import threading
 
 from workspace.bt import Action, predicate
@@ -603,6 +605,110 @@ class _CardWorker:
 _CARD = _CardWorker()
 
 
+# ── Visual fails: kept in the run's records ───────────────────────────
+# Every disc a camera FAILS (a chip, off-centre, no edge, no inner edge,
+# the classifier — not "no disc": there is no disc to show) keeps its card:
+# the disc's square (the detector's box grown by CLS_ROI_OFFSET px) at
+# FAIL_SIDE px, nothing drawn, and the card's numbers beside it as JSON,
+# in its own coordinates — records/<run>/fails/disc_007_bottom.jpg / .json,
+# named in the records sheet (``visual_card``) — when the run's
+# ``save_fail_pictures`` (hmi/default.j2, the setup screen; off by
+# default) turns it on; off, nothing is fetched or saved and there is no
+# ``visual_card``. Observability never
+# blocks (project-guide §8): one worker thread, every fail queued — none
+# dropped; a failure costs that picture, never the run. The frame is
+# fetched at the size that puts the square at FAIL_SIDE px (the camera's
+# full size learnt from its first fetch), so the disc keeps its detail and
+# only the square is decoded.
+FAIL_SIDE = 800
+SAVE_FAIL_PICTURES = False
+
+
+def _fail_name(card):
+    """A fail's file stem: ``disc_007_bottom``."""
+    return f"disc_{int(card['disc']):03d}_{str(card['cam']).split()[0]}"
+
+
+class _FailKeeper:
+    """Keeps every visual fail's card (see FAIL_SIDE): fetch, crop, save —
+    off the action's thread."""
+
+    def __init__(self):
+        self._q = queue.Queue()
+        self._thread = None
+        self._lock = threading.Lock()
+        self._src = {}          # alias -> the camera's full frame [h, w]
+
+    def post(self, ctx, alias, card, box):
+        self._q.put((ctx, alias, card, box))
+        with self._lock:
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._loop, name="apc-visual-fails", daemon=True)
+                self._thread.start()
+
+    def _loop(self):
+        while True:
+            job = self._q.get()
+            try:
+                self._keep(*job)
+            except Exception as ex:
+                print(f"[visual fails] {_fail_name(job[2])} dropped: {type(ex).__name__}: {ex}")
+
+    def _keep(self, ctx, alias, card, box):
+        import cv2 as cv
+        import numpy as np
+        run_dir = ctx.runtime.record_run_dir
+        if not run_dir:
+            return                                     # no records folder: nowhere to keep it
+        xs = [c[0] for c in box]; ys = [c[1] for c in box]
+        side = max(max(xs) - min(xs), max(ys) - min(ys)) + 2 * CLS_ROI_OFFSET     # frame px
+        src = self._src.get(alias)
+        max_side = None if src is None else math.ceil(max(src) * min(1.0, FAIL_SIDE / side))
+        data, meta = ctx.recipes[alias].get_img(kind="color_img", quality=90, max_side=max_side, meta=True)
+        if not data or not meta:
+            return                                     # sim, or no frame: no picture
+        self._src[alias] = meta["source_shape"]
+        img = cv.imdecode(np.frombuffer(data, np.uint8), cv.IMREAD_COLOR)
+        sf = float(meta.get("scale", 1.0))             # fetched px per frame px
+        h, w = img.shape[:2]
+        cx, cy, half = (min(xs) + max(xs)) / 2 * sf, (min(ys) + max(ys)) / 2 * sf, side * sf / 2
+        x0, y0 = max(0, round(cx - half)), max(0, round(cy - half))
+        crop = img[y0:min(h, round(cy + half)), x0:min(w, round(cx + half))]
+        rf = min(1.0, FAIL_SIDE / max(crop.shape[:2]))
+        if rf < 1.0:
+            crop = cv.resize(crop, (round(crop.shape[1] * rf), round(crop.shape[0] * rf)), interpolation=cv.INTER_AREA)
+        ok, jpg = cv.imencode(".jpg", crop, [cv.IMWRITE_JPEG_QUALITY, 80])
+        if not ok:
+            return
+        jpg = jpg.tobytes()
+
+        # the card in the saved square's pixels
+        k = sf * rf
+        pt = lambda x, y: [round((x * sf - x0) * rf, 1), round((y * sf - y0) * rf, 1)]
+        circ = lambda c: None if c is None else pt(c[0], c[1]) + [round(c[2] * k, 1)]
+        kept = dict(card, w=crop.shape[1], h=crop.shape[0])
+        if card.get("det"):
+            b = card["det"]["box"]
+            kept["det"] = dict(card["det"], box=pt(b[0], b[1]) + pt(b[2], b[3]))
+        kept["outer"], kept["inner"] = circ(card.get("outer")), circ(card.get("inner"))
+        if card.get("cls"):
+            kept["cls"] = dict(card["cls"], circle=circ(card["cls"].get("circle")))
+
+        from workspace.project_dirs import hand_back
+        name, folder = _fail_name(card), os.path.join(run_dir, "fails")
+        for d in (run_dir, folder):
+            if not os.path.isdir(d):
+                os.makedirs(d, exist_ok=True)
+                hand_back(d)                           # the server is root; the operator deletes runs
+        with open(os.path.join(folder, name + ".jpg"), "wb") as f:
+            f.write(jpg)
+        with open(os.path.join(folder, name + ".json"), "w") as f:
+            json.dump(dict(kept, img=name + ".jpg"), f, indent=1)
+
+
+_FAILS = _FailKeeper()
+
+
 def _inspect(action, cam, disc):
     """One camera's check (STATION / ROBOT): the detector; the band's
     circles on its box (_circles), judged (_judge) — the checks the run does
@@ -630,10 +736,15 @@ def _inspect(action, cam, disc):
     def verdict(v, why, m, alias, failed_at=None):
         # failed_at: the check the disc stopped at (detector / circles /
         # chip / concentric / classifier) — the card draws the tiles after it as
-        # not run
-        _CARD.post(action.ctx, alias, dict(card, verdict=v, why=why, failed_at=failed_at,
-                                           dent=m.get("ring_dent_px"), dent_at=m.get("ring_dent_at"),
-                                           offset=m.get("ring_offset_px")))
+        # not run. A fail's card is also kept (_FAILS) when the run turns
+        # it on, named in its record.
+        done = dict(card, verdict=v, why=why, failed_at=failed_at,
+                    dent=m.get("ring_dent_px"), dent_at=m.get("ring_dent_at"),
+                    offset=m.get("ring_offset_px"))
+        _CARD.post(action.ctx, alias, done)
+        if v == "fail" and SAVE_FAIL_PICTURES:
+            _FAILS.post(action.ctx, alias, done, box)
+            action.ctx.runtime.record(_tag(disc), visual_card=f"fails/{_fail_name(done)}.jpg")
         return v, why, m
 
     best = _detect(action, cam["od"])
@@ -876,6 +987,12 @@ def setup(**kwargs):
     RING_CHIP_PX = CHIP_MODES[RING_CHIP_MODE]
     RING_OFFSET_MODE = _mode("ring_offset", OFFSET_MODES)
     RING_OFFSET_PX = OFFSET_MODES[RING_OFFSET_MODE]
+
+    # Keep each visual fail's picture in the run's records (FAIL_SIDE).
+    global SAVE_FAIL_PICTURES
+    v = kwargs.get("save_fail_pictures")
+    v = _schema_default("save_fail_pictures") if v is None else v
+    SAVE_FAIL_PICTURES = v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "yes", "on")
 
     INVENTORY.clear()
     LOADED.clear()

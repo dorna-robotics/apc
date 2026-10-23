@@ -26,7 +26,10 @@ uses them. Every disc's measured dent, offset and
 edge ÷ box ratio are in the records sheet, and the pendant's **Last
 inspection** card shows the latest verdict on its own frame — the
 detector's box, the two circles, a close-up of the edge's deepest dent, the face the classifier sees — the
-frame held in memory by the runtime (`rt.asset`), never saved. How sure the classifier must
+frame held in memory by the runtime (`rt.asset`). A disc a camera fails also
+keeps its card — the disc's square at 800 px and its numbers — in
+`records/<run>/fails/` (docs/out-holders.md) when the run's
+`save_fail_pictures` is on (off by default). How sure the classifier must
 be is the run's
 `classifier` setting on the setup screen: high (a pass needs 75 %),
 medium (50 %, the model's own call), low (25 %), or ignore (no
@@ -75,7 +78,7 @@ apc/
 ├── vision/             # the detections: a config per model, the model beside it (below)
 ├── dev/camera/         # camera bring-up notebook
 ├── core/               # this bench: calibration, caches, motion book (git-ignored)
-├── records/            # one folder per run: records.jsonl, records.csv — the per-disc sheet (git-ignored)
+├── records/            # one folder per run: records.jsonl, records.csv — the per-disc sheet; fails/ — each visual fail's card (git-ignored)
 ├── replays/            # replay recordings (git-ignored)
 ├── uploads/            # operator input files — a file parameter's Open (git-ignored)
 ├── captures/           # the detections' pictures, one file per run per detection (git-ignored; saving off for now)

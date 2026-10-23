@@ -66,3 +66,9 @@ classifier: medium
 # (ring_dent_px, ring_offset_px; top_ring_offset_px for the robot camera).
 ring_chip: medium
 ring_offset: medium
+
+# Keep each disc a camera fails as a picture in the run's records —
+# records/<run>/fails/: the disc's square at 800 px and its numbers (about
+# 50 KB from the bottom camera, 90 KB from the top), named in the sheet's
+# visual_card. false (the default): nothing saved.
+save_fail_pictures: false

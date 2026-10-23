@@ -90,9 +90,19 @@ One row per disc in `records/<run>/records.csv`:
 | `reason` | `C = 4.7e-07`, `bottom camera: chip`, `bottom camera: off-centre`, `top camera: off-centre`, `bottom camera: classifier fail`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
 | `ring_dent_px`, `ring_dent_at`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (`top_ring_offset_px`, `top_ring_box_ratio` the robot camera's) — choose the run's sensitivities from these |
 | `c_f` | farads | the reading, when the disc was measured |
+| `visual_card` | `fails/disc_007_bottom.jpg` | a camera fail's card, kept beside the sheet |
 
 The pendant shows the same: a count in every OUT position, the pass /
 fail tally, and the last reading.
+
+Every disc a camera failed (a chip, off-centre, no edge, no inner edge,
+the classifier; not "no disc") keeps its card in `records/<run>/fails/`:
+the disc's square, 800 px, nothing drawn (about 50 KB from the bottom
+camera, 90 KB from the top), and a `.json` beside it with the card's
+numbers and the thresholds in force, in that picture's pixels — when the
+run's **Fail pictures** setting (`save_fail_pictures`, the setup screen's
+Inspection step) is On. It is Off by default: nothing is saved and the
+sheet has no `visual_card`; `reason` still says why each disc failed.
 
 ---
 
