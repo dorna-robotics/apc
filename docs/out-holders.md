@@ -22,24 +22,17 @@ fills up mid-run.
 ## Fail 1 — the bad discs, by what went wrong
 
 The fail holder is split into three lanes. Which lane a disc goes to
-says what failed it, so the holder can be read without the sheet.
+says what failed it, so the holder can be read without the sheet. The
+setup screen and the pendant name them under the Fail row: **Capacitor**
+(A1–A3), **Visual** (A4–A6), **Stuck** (A7).
 
-### A1 – A4 · measurement fail
+### A1 – A3 · capacitor fail
 
 Both cameras passed the disc, the meter read it, the reading is outside
 the window. The value is in the run's records sheet (`c_f`). Fills
-A1 → A4 in order.
+A1 → A3 in order.
 
-### A5 · stuck on the anode
-
-After the pick off the anode the robot camera still saw a disc on the
-anode. Whatever the hand holds at that moment (the disc, a second one
-that came up with it, or nothing) is dropped at A5 and counted as one
-fail. The anode is then blown clear before the next disc is placed, up
-to `ClearAnode.MAX_BLOWS` tries, after which the run pauses for you to
-clear it by hand and Resume.
-
-### A6 – A7 · camera fail
+### A4 – A6 · visual fail
 
 A camera said the disc is bad, or saw no disc at all:
 
@@ -48,16 +41,26 @@ A camera said the disc is bad, or saw no disc at all:
   inner circle of the band; or off-centre (beyond the run's
   `ring_offset`); or the classifier failed it (the run's `classifier`
   sensitivity). The disc goes
-  straight to A6 / A7 without a measurement. If the camera saw *no* disc, the hand
+  straight to A4 – A6 without a measurement. If the camera saw *no* disc, the hand
   still goes through the drop (the suction is never released mid-way),
   but nothing is counted: the position's fill count and the fail tally
   do not move, so an empty hand never lifts the next real drop.
 - **Top (robot) camera, on the anode.** The classifier failed it (the
   top camera runs no circles). No clamp, no reading: the disc is
-  picked back off the anode and dropped at A6 / A7, counted. "No disc"
+  picked back off the anode and dropped at A4 – A6, counted. "No disc"
   here counts too, since the bottom camera had seen it.
 
-Fills A6, then A7.
+Fills A4, A5, then A6.
+
+### A7 · stuck on the anode
+
+After the pick off the anode the robot camera still saw a disc on the
+anode — an extra disc came up with the pick, or one stayed behind.
+Whatever the hand holds at that moment (the disc, a second one that came
+up with it, or nothing) is dropped at A7 and counted as one fail. The
+anode is then blown clear before the next disc is placed, up to
+`ClearAnode.MAX_BLOWS` tries, after which the run pauses for you to
+clear it by hand and Resume.
 
 ## What never reaches an out holder
 
@@ -81,7 +84,7 @@ One row per disc in `records/<run>/records.csv`:
 | column | reads | meaning |
 |---|---|---|
 | `result` | `pass` / `fail` | which kind of holder |
-| `out` | `Pass 1 A3`, `Fail 1 A5`, `Fail 1 A6 (empty hand)` | holder and position; `(empty hand)` = nothing was dropped or counted |
+| `out` | `Pass 1 A3`, `Fail 1 A7`, `Fail 1 A4 (empty hand)` | holder and position; `(empty hand)` = nothing was dropped or counted |
 | `reason` | `C = 4.7e-07`, `bottom camera: chip`, `bottom camera: off-centre`, `bottom camera: classifier fail`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
 | `ring_dent_px`, `ring_dent_at`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (the robot camera runs none) — choose the run's sensitivities from these |
 | `c_f` | farads | the reading, when the disc was measured |
@@ -96,9 +99,9 @@ fail tally, and the last reading.
 | Holder | Positions | Holds | Decided by |
 |---|---|---|---|
 | Pass 1, Pass 2 | the IN position it came from (In 2 A3 → Pass 2 A3) | capacitance inside the window | the meter (`Sort`) |
-| Fail 1 | A1 → A4 | reading outside the window | the meter (`Sort`) |
-| Fail 1 | A5 | a disc was still on the anode after the pick | robot camera (`CheckAnode`) |
-| Fail 1 | A6 → A7 | a camera said fail, or saw no disc | station camera (`Reject`), robot camera (`Sort`) |
+| Fail 1 | A1 → A3 · Capacitor | reading outside the window | the meter (`Sort`) |
+| Fail 1 | A4 → A6 · Visual | a camera said fail, or saw no disc | station camera (`Reject`), robot camera (`Sort`) |
+| Fail 1 | A7 · Stuck | a disc was still on the anode after the pick | robot camera (`CheckAnode`) |
 
 Set in `actions.py`: the fail lanes (`LANES`), the pass mirror (`_lane`), the window (`Sort.C_MIN`,
 `Sort.C_MAX`), the blow tries (`ClearAnode.MAX_BLOWS`), the empties

@@ -75,16 +75,16 @@
 const SLOTS_N = 7;
 const SLOTS   = Array.from({ length: SLOTS_N }, (_, i) => `A${i + 1}`);
 
-// Same table as setup.js, same order.
+// Same table as setup.js, same order — ``lanes`` too (actions.py LANES).
 const HOLDERS = [
-  { key: "bad_1",  label: "Fail",   role: "bad",  in: false },
+  { key: "bad_1",  label: "Fail",   role: "bad",  in: false, lanes: [["Capacitor", 3], ["Visual", 3], ["Stuck", 1]] },
   { key: "good_2", label: "Pass 2", role: "good", in: false },
   { key: "good_1", label: "Pass 1", role: "good", in: false },
   { key: "in_2",   label: "In 2",   role: "in",   in: true  },
   { key: "in_1",   label: "In 1",   role: "in",   in: true  },
 ];
 
-const CELL = 56, GAP = 6, GUTTER = 52;   // the setup screen's sizes
+const CELL = 56, GAP = 10, GUTTER = 52;   // the setup screen's sizes
 
 const IN_STATES = {
   empty:  { glyph: "",  label: "Empty" },
@@ -234,15 +234,19 @@ const CSS = `
 .ring .pct small { font-size:var(--text-md); font-weight:400; opacity:.6; margin-left:1px; }
 @media (prefers-reduced-motion: reduce) { .ring .fill { transition:none; } }
 
-/* the bench: one grid, A1 on the left, a hairline between OUT and IN */
-.scroll { overflow-x:auto; }
+/* the bench: one grid, A1 on the left, space between OUT and IN */
+.scroll { overflow-x:auto; padding:4px; }   /* room for a lane's box, 3 px past the wells */
 .rack { display:grid; grid-template-columns:${GUTTER}px repeat(${SLOTS_N}, ${CELL}px);
   gap:${GAP}px; justify-content:center; align-items:center; justify-items:center; }
-.ax { font-size:9px; opacity:.45; text-align:center;
-  font-family:ui-monospace,Menlo,Consolas,monospace; }
 .rlab { justify-self:start; font-size:var(--text-sm); font-weight:700; }
-.sep { grid-column:1 / -1; height:1px; background:var(--border); margin:3px 0;
-  width:100%; }
+.gap { grid-column:1 / -1; height:12px; }
+/* a holder's lanes: each lane's wells in one rounded box, its name over
+   it (setup.js draws them the same) */
+.lane { align-self:end; margin-bottom:2px; text-align:center;
+  font-size:10px; font-weight:600; color:var(--muted); }
+.lanebox { justify-self:stretch; display:flex; gap:${GAP}px; margin:-3px;
+  padding:2px; border:1px solid var(--border); border-radius:${CELL / 2 + 3}px;
+  background:color-mix(in srgb, var(--text) 3%, transparent); }
 
 .w { position:relative; width:${CELL}px; height:${CELL}px;
   border:2px solid var(--border); border-radius:50%; background:var(--surface);
@@ -333,14 +337,18 @@ function benchHtml(v) {
   const outs  = (v.out_stacks && typeof v.out_stacks === "object") ? v.out_stacks : {};
   const left  = (v.in_left    && typeof v.in_left    === "object") ? v.in_left    : {};
   const cnts  = (v.out_counts && typeof v.out_counts === "object") ? v.out_counts : {};
-  let h = `<div class="ax"></div>` + SLOTS.map(s => `<div class="ax">${s}</div>`).join("");
+  let h = "";
   let prevIn = null;
   for (const hd of HOLDERS) {
-    if (prevIn !== null && prevIn !== hd.in) h += `<div class="sep"></div>`;
+    if (prevIn !== null && prevIn !== hd.in) h += `<div class="gap"></div>`;
     prevIn = hd.in;
+    // the holder's lanes, over it, as setup.js draws them
+    if (hd.lanes) h += `<div></div>` + hd.lanes.map(([label, n]) =>
+      `<div class="lane" style="grid-column:span ${n}">${esc(label)}</div>`).join("");
     h += `<div class="rlab">${esc(hd.label)}</div>`;
     const row  = Array.isArray((hd.in ? ins : outs)[hd.key]) ? (hd.in ? ins : outs)[hd.key] : [];
     const nums = Array.isArray((hd.in ? left : cnts)[hd.key]) ? (hd.in ? left : cnts)[hd.key] : [];
+    const ws = [];
     for (let i = 0; i < SLOTS_N; i++) {
       const raw = String(row[i] || "empty");
       const table = hd.in ? IN_STATES : OUT_STATES;
@@ -362,9 +370,16 @@ function benchHtml(v) {
       }
       const what = hd.in ? (n == null ? "" : ` · ${n} left`) : (n == null ? "" : ` · ${n} disc${n === 1 ? "" : "s"}`);
       const title = `${hd.label} · ${SLOTS[i]} · ${table[st].label}${what}`;
-      h += `<div class="w ${hd.role}" data-state="${attr}" title="${esc(title)}">` +
-           `<b>${SLOTS[i]}</b>` + (line ? `<u>${esc(line)}</u>` : "") + `</div>`;
+      ws.push(`<div class="w ${hd.role}" data-state="${attr}" title="${esc(title)}">` +
+              `<b>${SLOTS[i]}</b>` + (line ? `<u>${esc(line)}</u>` : "") + `</div>`);
     }
+    // a lane's wells boxed together, as setup.js laneRow
+    let at = 0;
+    h += !hd.lanes ? ws.join("") : hd.lanes.map(([, n]) => {
+      const box = `<div class="lanebox" style="grid-column:span ${n}">${ws.slice(at, at + n).join("")}</div>`;
+      at += n;
+      return box;
+    }).join("");
   }
   return h;
 }

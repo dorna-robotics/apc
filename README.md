@@ -41,8 +41,8 @@ pauses for the operator after `ClearAnode.MAX_BLOWS` blows of
 hand a stuck fail. No disc is picked while the anode holds one (`Pick`
 needs `anode_clear`, as `PlaceAnode` does): the blow-off needs the hand
 empty. A pass lands where it was picked, mirrored: In 2 A3 → Pass 2
-A3 (`_lane`). The fail holder is lanes (`LANES`): A1–A4 readings
-outside the window, A5 stuck, A6–A7 camera fails. Two "no disc"
+A3 (`_lane`). The fail holder is lanes (`LANES`): A1–A3 capacitor
+readings outside the window, A4–A6 camera (visual) fails, A7 stuck. Two "no disc"
 verdicts in a row from one IN position (`EMPTY_RUN_ENDS_COLUMN`) end
 that position: its remaining discs are voided, the run moves on. These
 three are parameters at the top of `actions.py` and on `ClearAnode`.

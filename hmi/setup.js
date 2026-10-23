@@ -82,8 +82,11 @@ const pick = (v, modes) => (modes.some(m => m.key === String(v).toLowerCase()) ?
 
 // The holders, TOP TO BOTTOM as drawn. `in` rows take clicks; the rest
 // are placeholders the robot fills during the run.
+// ``lanes``: the Fail holder's three lanes, left to right, [label, wells]
+// — actions.py LANES: A1–A3 the capacitor reading outside the window,
+// A4–A6 a camera fail, A7 stuck on the anode. Drawn as a row over it.
 export const HOLDERS = [
-  { key: "bad_1",  label: "Fail",   in: false },
+  { key: "bad_1",  label: "Fail",   in: false, lanes: [["Capacitor", 3], ["Visual", 3], ["Stuck", 1]] },
   { key: "good_2", label: "Pass 2", in: false },
   { key: "good_1", label: "Pass 1", in: false },
   { key: "in_2",   label: "In 2",   in: true  },
@@ -98,7 +101,7 @@ const N_IN_STACKS = IN_HOLDERS.length * SLOTS_N;            // 14 clickable posi
 // ── drawn at the 40 mL size ────────────────────────────────────────────
 // A disc stack gets the cell bna gives a 40 mL vial: a circle big enough
 // for its address. Row labels sit in a gutter on the left.
-const CELL = 56, GAP = 6, GUTTER = 52;
+const CELL = 56, GAP = 10, GUTTER = 52;   // GAP: room for a lane's box between two lanes
 
 // A position in text: A3@In1 — the slot first, then the holder (its row
 // label with the space dropped). Used by every tooltip here and by the
@@ -127,6 +130,15 @@ export const CSS = kitCss + wellCss({
 /* the bench: five holder rows in one grid, A1 on the left */
 .hmi .rack.disc { grid-template-columns:${GUTTER}px repeat(${SLOTS_N}, ${CELL}px);
   gap:${GAP}px; justify-content:center; }
+/* a holder's lanes: each lane's wells in one rounded box, its name over
+   it. The box's padding + border (3 px) is taken back by its margin, so
+   its wells sit exactly on the grid's columns; two boxes keep GAP - 6 px
+   apart */
+.hmi .rack.disc .lane { align-self:end; margin-bottom:2px; text-align:center;
+  font-size:10px; font-weight:600; color:var(--muted); }
+.hmi .rack.disc .lanebox { justify-self:stretch; display:flex; gap:${GAP}px; margin:-3px;
+  padding:2px; border:1px solid var(--border); border-radius:${CELL / 2 + 3}px;
+  background:color-mix(in srgb, var(--text) 3%, transparent); }
 .hmi .rack.disc .well { width:${CELL}px; height:${CELL}px; flex-direction:column;
   line-height:1.1; font-size:11px; }
 .hmi .rack.disc .well b { font-size:12px; font-weight:700; }
@@ -158,10 +170,8 @@ export const CSS = kitCss + wellCss({
 .hmi .rack.disc .well.pos:hover { transform:scale(1.06); }
 /* row labels */
 .hmi .rack.disc .rlab { justify-self:start; font-size:11px; font-weight:700; }
-/* the OUT / IN groups are two different things: a hairline between them
-   (width:100% — the kit centres grid items, which would shrink it to 0) */
-.hmi .rack.disc .sep { grid-column:1 / -1; width:100%; height:1px;
-  background:var(--border); margin:3px 0; }
+/* the OUT / IN groups are two different things: space between them, no rule */
+.hmi .rack.disc .gap { grid-column:1 / -1; height:12px; }
 /* the legend reads inline, like bna's: one line of swatches under the bench */
 .hmi.apc .legend { flex-direction:row; flex-wrap:wrap; gap:var(--space-4);
   font-size:var(--text-xs); opacity:.85; color:inherit; }
@@ -334,9 +344,9 @@ function msgHtml(V) {
 }
 
 // ── render ─────────────────────────────────────────────────────────────
-// One grid for the whole bench. Axis across the top, A1 on the left; one
-// row per holder in HOLDERS order; a hairline between the OUT and IN
-// groups. Every IN position is a toggle carrying its holder key and
+// One grid for the whole bench, A1 on the left (every well names its
+// position); one row per holder in HOLDERS order, a holder's lanes over
+// it; space between the OUT and IN groups. Every IN position is a toggle carrying its holder key and
 // index (data-h / data-i); OUT positions carry nothing.
 //
 // Every full position carries its disc count as a pill (st.full).
@@ -349,12 +359,14 @@ function msgHtml(V) {
 export function benchHtml(st, opts = {}) {
   const counts = opts.counts || null;
   const crossed = opts.crossed || new Set();
-  let h = `<div class="ax"></div>` + SLOTS.map(s => `<div class="ax">${s}</div>`).join("");
+  let h = "";
   let prevIn = null;
   for (const hd of HOLDERS) {
-    if (prevIn !== null && prevIn !== hd.in) h += `<div class="sep"></div>`;
+    if (prevIn !== null && prevIn !== hd.in) h += `<div class="gap"></div>`;
     prevIn = hd.in;
+    h += lanesHtml(hd);
     h += `<div class="rlab">${esc(hd.label)}</div>`;
+    const ws = [];
     for (let i = 0; i < SLOTS_N; i++) {
       const s = SLOTS[i];
       const full = hd.in && !!st.in[hd.key][i];     // OUT rows have no flags
@@ -363,20 +375,52 @@ export function benchHtml(st, opts = {}) {
       const pos = `${hd.key}:${i}`;
       const cls = counts ? (n ? " pos" : "") + (crossed.has(pos) ? " skip" : "") : " toggle";
       if (!hd.in) {
-        h += `<div class="well out" title="${esc(`${posName(hd.label, s)} · empty — the robot fills it during the run`)}"><b>${s}</b><i>empty</i></div>`;
+        ws.push(`<div class="well out" title="${esc(`${posName(hd.label, s)} · ${laneOf(hd, i)}empty — the robot fills it during the run`)}"><b>${s}</b><i>empty</i></div>`);
       } else if (full) {
         const tip = counts ? `${n} disc${n === 1 ? "" : "s"} in the run${n ? " · click to take them all out" : ""}` : "full · click to mark empty";
-        h += `<div class="well k-full${cls}" data-h="${hd.key}" data-i="${i}" ` +
-          `title="${esc(`${posName(hd.label, s)} · ${tip}`)}"><b>${s}</b><i>full</i>${pill}</div>`;
+        ws.push(`<div class="well k-full${cls}" data-h="${hd.key}" data-i="${i}" ` +
+          `title="${esc(`${posName(hd.label, s)} · ${tip}`)}"><b>${s}</b><i>full</i>${pill}</div>`);
       } else {
         const tip = counts ? "empty" : "empty · click to mark full";
         const pick = counts ? "" : " pick";
-        h += `<div class="well empty${pick}${cls}" data-h="${hd.key}" data-i="${i}" ` +
-          `title="${esc(`${posName(hd.label, s)} · ${tip}`)}"><b>${s}</b><i>${counts ? "empty" : "+ fill"}</i>${pill}</div>`;
+        ws.push(`<div class="well empty${pick}${cls}" data-h="${hd.key}" data-i="${i}" ` +
+          `title="${esc(`${posName(hd.label, s)} · ${tip}`)}"><b>${s}</b><i>${counts ? "empty" : "+ fill"}</i>${pill}</div>`);
       }
     }
+    h += laneRow(hd, ws);
   }
   return h;
+}
+
+// A holder row's wells, a lane's wells boxed together (lanes: the Fail
+// holder's only) — each box spans its lane's columns, so the wells stay on
+// the grid.
+export function laneRow(hd, ws) {
+  if (!hd.lanes) return ws.join("");
+  let at = 0;
+  return hd.lanes.map(([, n]) => {
+    const box = `<div class="lanebox" style="grid-column:span ${n}">${ws.slice(at, at + n).join("")}</div>`;
+    at += n;
+    return box;
+  }).join("");
+}
+
+// The holder's lanes' names as a row over it — each over its lane's box
+// (laneRow) — or nothing (lanes are the Fail holder's only).
+export function lanesHtml(hd) {
+  if (!hd.lanes) return "";
+  return `<div></div>` + hd.lanes.map(([label, n]) =>
+    `<div class="lane" style="grid-column:span ${n}">${esc(label)}</div>`).join("");
+}
+
+// "Visual · " — the lane a holder's position i is in, for its tooltip.
+function laneOf(hd, i) {
+  let at = 0;
+  for (const [label, n] of hd.lanes || []) {
+    if (i < at + n) return `${label} · `;
+    at += n;
+  }
+  return "";
 }
 
 function stepBar(st, V) {

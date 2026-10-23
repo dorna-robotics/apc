@@ -62,8 +62,8 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     a STUCK fail and the anode must be cleared before the
                     next placement.
   13. Sort          drop it into an OUT holder by its LANE (LANES): a
-                    camera fail → the fail holder's A6–A7; stuck → A5; a
-                    reading outside C_MIN..C_MAX → A1–A4; a pass → the
+                    reading outside C_MIN..C_MAX → the fail holder's
+                    A1–A3; a camera fail → A4–A6; stuck → A7; a pass → the
                     pass holder and slot that MIRROR where it was picked
                     (in_2 A3 → out_good_2 A3).
 
@@ -99,9 +99,9 @@ an ordered list of (holder, slot) positions, one lane per verdict (_lane):
                   Ax, so a pass holder reads like the IN holder it came
                   from. A position holds at most MAX_PER_SLOT discs on
                   either side, so a pass position never overflows.
-  * fail_measure  out_bad_1 A1→A4 — the reading outside the window
-  * fail_stuck    out_bad_1 A5    — the anode still showed a disc after the pick
-  * fail_visual   out_bad_1 A6→A7 — a camera said fail, or saw no disc
+  * fail_measure  out_bad_1 A1→A3 — the reading outside the window (capacitor)
+  * fail_visual   out_bad_1 A4→A6 — a camera said fail, or saw no disc
+  * fail_stuck    out_bad_1 A7    — the anode still showed a disc after the pick
   * within a position: z starts at 0 and steps by Z_STEP per disc, up to
     MAX_PER_SLOT discs, then the lane's next position.
 Every sorted disc is DELETED right after place() — sorted discs are
@@ -271,17 +271,20 @@ _STEPS = 13                                    # per-disc steps for progress (no
 # that order, MAX_PER_SLOT discs each (z stepping by Z_STEP), one lane per
 # verdict. A PASS goes to the mirror of where it was picked — in_k Ax →
 # PASS_HOLDERS[k-1] Ax, one position (_lane). The fail holder is split:
-# A1–A4 take the discs whose READING was outside the window, A5 the discs
-# the hand held while the anode still showed one (STUCK — what the hand
-# holds is not trusted), A6–A7 the discs a CAMERA failed (or saw no disc),
-# so the kinds never mix in one stack. Which lane a disc takes is decided
+# A1–A3 take the discs whose READING was outside the window (capacitor),
+# A4–A6 the discs a CAMERA failed (or saw no disc), A7 the discs the hand
+# held while the anode still showed one (STUCK — an extra disc came up, or
+# one stayed behind; what the hand holds is not trusted), so the kinds
+# never mix in one stack. The setup screen and the pendant label the
+# three lanes under the Fail row (hmi/setup.js, hmi/pendant.js HOLDERS
+# ``lanes``) — change one, change all. Which lane a disc takes is decided
 # in Sort / Reject; _drop only walks it.
 PASS_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]    # in_1's mirror, in_2's mirror
 FAIL_HOLDER  = "disc_out_bad_1"
 LANES = {
-    "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[0:4]],     # A1..A4
-    "fail_stuck":   [(FAIL_HOLDER, s) for s in SLOTS[4:5]],     # A5
-    "fail_visual":  [(FAIL_HOLDER, s) for s in SLOTS[5:7]],     # A6, A7
+    "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[0:3]],     # A1..A3
+    "fail_visual":  [(FAIL_HOLDER, s) for s in SLOTS[3:6]],     # A4..A6
+    "fail_stuck":   [(FAIL_HOLDER, s) for s in SLOTS[6:7]],     # A7
 }
 
 # Where the robot camera looks at the anode from — the stand PlaceAnode
