@@ -48,32 +48,33 @@ export const SLOTS_N = 7;                                   // SLOTS: A1..A7
 export const SLOTS   = Array.from({ length: SLOTS_N }, (_, i) => `A${i + 1}`);
 export const IN_KEYS = ["in_1", "in_2"];                    // the kwargs, consumed in this order
 
-// Classifier sensitivity — the ``classifier`` kwarg. The pass/fail model
-// gives a probability that the disc is a pass; the run passes a disc only
-// if it clears the threshold. Mirrors CLS_MODES in actions.py, and says
-// the number so nobody has to guess which way "high" cuts.
-// Left to right, least to most strict — the way a dial reads.
+// The Inspection step's checks, each one card in one pattern: the title
+// names the check and what it measures; Ignore · Low · Medium · High run
+// left to right, least to most strict — the way a dial reads — and every
+// hint says "Fails …" with the number, then what it was measured to do,
+// so nobody has to guess which way "high" cuts.
+//
+// The classifier — the ``classifier`` kwarg: how sure the model must be
+// that a disc is bad. Mirrors CLS_MODES in actions.py (fail above X).
 const CLS_MODES = [
-  { key: "ignore", label: "Ignore", hint: "no classifier — the detector must see a disc; the reading sorts" },
-  { key: "low",    label: "Low",    hint: "a pass needs 25 % — lets more through" },
-  { key: "medium", label: "Medium", hint: "a pass needs 50 % — the model's own call" },
-  { key: "high",   label: "High",   hint: "a pass needs 75 % — catches the most" },
+  { key: "ignore", label: "Ignore", hint: "Off — the classifier fails no disc; the detector still has to see one" },
+  { key: "low",    label: "Low",    hint: "Fails a disc when the model is over 70 % sure it is bad — misses about half the face defects, fails about 2.5 % of good discs" },
+  { key: "medium", label: "Medium", hint: "Fails a disc when the model is over 50 % sure it is bad (its own call) — misses about a third, fails about 4 % of good discs" },
+  { key: "high",   label: "High",   hint: "Fails a disc when the model is over 40 % sure it is bad — misses about a quarter, fails about 8 % of good discs" },
 ];
-// The ring's two sensitivities — the ``ring_chip`` / ``ring_offset``
-// kwargs. Mirror CHIP_MODES / OFFSET_MODES in actions.py and say the
-// number; left to right, least to most strict, as the classifier's —
-// Ignore first, as its.
+// The chip and off-centre checks — the ``ring_chip`` / ``ring_offset``
+// kwargs. Mirror CHIP_MODES / OFFSET_MODES in actions.py.
 const CHIP_MODES = [
-  { key: "ignore", label: "Ignore", hint: "no chip check — a chipped disc is not failed for it" },
-  { key: "low",    label: "Low",    hint: "a notch in the band up to 5 px deep passes — lets small chips through" },
-  { key: "medium", label: "Medium", hint: "a notch deeper than 3.5 px is a chip — good discs measured 1.1–3.1 px, chips 3.6–15 px" },
-  { key: "high",   label: "High",   hint: "a notch deeper than 3 px is a chip — close to a good disc's 3.1 px" },
+  { key: "ignore", label: "Ignore", hint: "Off — a chipped disc is not failed for it" },
+  { key: "low",    label: "Low",    hint: "Fails a notch deeper than 5 px — lets small chips through" },
+  { key: "medium", label: "Medium", hint: "Fails a notch deeper than 3.5 px — good discs measured 1.1–3.1 px, chips 3.6–15 px" },
+  { key: "high",   label: "High",   hint: "Fails a notch deeper than 3 px — close to a good disc's 3.1 px, may fail some" },
 ];
 const OFFSET_MODES = [
-  { key: "ignore", label: "Ignore", hint: "no centre check — an off-centre disc is not failed for it" },
-  { key: "low",    label: "Low",    hint: "the band's two centres at most 12 px apart" },
-  { key: "medium", label: "Medium", hint: "at most 8 px apart — measured: bottom 1.4–4.5 px on good discs, top 0.1–7.7 px" },
-  { key: "high",   label: "High",   hint: "at most 5 px apart — close to a good disc's 4.5 px on the bottom" },
+  { key: "ignore", label: "Ignore", hint: "Off — an off-centre disc is not failed for it" },
+  { key: "low",    label: "Low",    hint: "Fails when the band's two centres are more than 12 px apart" },
+  { key: "medium", label: "Medium", hint: "Fails when the centres are more than 8 px apart — good discs measured 1.4–4.5 px (bottom), 0.1–7.7 px (top)" },
+  { key: "high",   label: "High",   hint: "Fails when the centres are more than 5 px apart — may fail some good discs on the top camera" },
 ];
 // A sensitivity from a saved value — medium for anything not offered.
 const pick = (v, modes) => (modes.some(m => m.key === String(v).toLowerCase()) ? String(v).toLowerCase() : "medium");
@@ -474,7 +475,7 @@ function bodyHtml(st) {
     return stepBar(st, V) + `
   <div class="stack">
     <div class="card">
-      <h4>Classifier sensitivity — how sure the pass / fail model must be</h4>
+      <h4>Classifier — how sure the model must be that the face is bad · both cameras</h4>
       <div class="inner">
         <div class="row seg">${CLS_MODES.map(m =>
           `<button type="button" class="pos${st.classifier === m.key ? " armed" : ""}" data-cls="${m.key}">${esc(m.label)}</button>`).join("")}
@@ -483,7 +484,7 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Chip sensitivity — the deepest notch in the band, station camera</h4>
+      <h4>Chip — the deepest notch in the band's edge · bottom camera</h4>
       <div class="inner">
         <div class="row seg">${CHIP_MODES.map(m =>
           `<button type="button" class="pos${st.ring_chip === m.key ? " armed" : ""}" data-ring="ring_chip" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
@@ -492,7 +493,7 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Concentric sensitivity — the band's two centres, both cameras</h4>
+      <h4>Off-centre — how far apart the band's two centres are · both cameras</h4>
       <div class="inner">
         <div class="row seg">${OFFSET_MODES.map(m =>
           `<button type="button" class="pos${st.ring_offset === m.key ? " armed" : ""}" data-ring="ring_offset" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
@@ -501,14 +502,14 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Fail pictures — keep each visual fail in the run's records</h4>
+      <h4>Fail pictures — save a picture of each disc a camera fails</h4>
       <div class="inner">
         <div class="row seg">${[[false, "Off"], [true, "On"]].map(([v, l]) =>
           `<button type="button" class="pos${st.save_fail_pictures === v ? " armed" : ""}" data-pics="${v}">${l}</button>`).join("")}
         </div>
         <div class="hint">${esc(st.save_fail_pictures
-          ? "each failed disc's picture and numbers go to records/<run>/fails/ — about 50–90 KB a disc"
-          : "nothing saved — the sheet still says why each disc failed")}</div>
+          ? "On — each one goes to records/<run>/fails/ with its numbers, about 50–90 KB a disc"
+          : "Off — nothing saved; the records sheet still says why each disc failed")}</div>
       </div>
     </div>
   </div>`;

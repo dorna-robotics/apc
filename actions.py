@@ -219,13 +219,15 @@ CLS_ROI_OFFSET     = 100
 # — change one, change both.
 FACE_MARGIN        = 10
 # Classifier SENSITIVITY — the ``classifier`` kwarg (hmi/default.j2, set on
-# the setup screen). The model gives a probability that the disc is a
-# pass; a disc passes only if that probability clears the threshold.
-# high catches the most (a pass needs 75 %), medium is the model's own
-# call (50 %), low lets more through (25 %). ignore skips the classifier
+# the setup screen): how sure the model must be that a disc is BAD before
+# it fails it — a disc fails when its fail probability is above the level's
+# number. low 70 % (fails only clear cases), medium 50 % (the model's own
+# call), high 40 % (catches the most). ignore skips the classifier
 # altogether — the detector still has to see a disc — and the sort is by
-# the reading alone. setup() writes CLS_MODE from the kwarg.
-CLS_MODES          = {"high": 0.75, "medium": 0.50, "low": 0.25, "ignore": None}
+# the reading alone. Measured on the face model (vision/disc_cls.yaml,
+# 59 fails / 284 good): low missed 31 fails and rejected 7 good discs,
+# medium 20 / 12, high 14 / 22. setup() writes CLS_MODE from the kwarg.
+CLS_MODES          = {"high": 0.40, "medium": 0.50, "low": 0.70, "ignore": None}
 CLS_MODE           = "medium"
 # The RING — the checks on the disc's circles, after the detector
 # (_judge; vision/disc_ring.yaml / disc_ring_top.yaml find them — the
@@ -386,13 +388,13 @@ def _end_column(action, disc) -> None:
 
 
 def _verdict(res) -> str:
-    """The classifier's word under the run's sensitivity: ``pass`` only
-    when its pass probability clears CLS_MODES[CLS_MODE]. An empty result
-    is a fail — a disc the model cannot vouch for never reaches the anode."""
+    """The classifier's word under the run's sensitivity: ``fail`` when its
+    fail probability is above CLS_MODES[CLS_MODE]. An empty result is a
+    fail — a disc the model cannot vouch for never reaches the anode."""
     threshold = CLS_MODES[CLS_MODE]
     if threshold is None:
         return "pass"            # ignore: the classifier has no say
-    return "pass" if _pass_prob(res) >= threshold else "fail"
+    return "fail" if 1.0 - _pass_prob(res) > threshold else "pass"
 
 
 def _anode_seen(action, sim_return=[]):
@@ -785,8 +787,8 @@ def _inspect(action, cam, disc):
     v = _verdict(res)
     action.ctx.runtime.step(
         f"{cam['cls']}: the face, {_diameter(face['corners']) - 2 * FACE_MARGIN:.0f} px across, "
-        f"pass {_pass_prob(res):.2f} vs {threshold:.2f} ({CLS_MODE}) -> {v}")
-    card["cls"].update(state=v, p=round(_pass_prob(res), 2), min=threshold)
+        f"fail {1.0 - _pass_prob(res):.2f}, fails above {threshold:.2f} ({CLS_MODE}) -> {v}")
+    card["cls"].update(state=v, p=round(1.0 - _pass_prob(res), 2), max=threshold)
     return verdict(v, "" if v == "pass" else f"{cam['name']}: classifier fail", m, frame,
                    None if v == "pass" else "classifier")
 
@@ -1065,7 +1067,7 @@ class Start(Action):
                  last_c_unit=None, last_result=None)
         thr = CLS_MODES[CLS_MODE]
         rt.step("classifier: ignored — the detector must see a disc, the reading sorts"
-                if thr is None else f"classifier: {CLS_MODE} — a pass needs ≥ {thr:.0%}")
+                if thr is None else f"classifier: {CLS_MODE} — fails a disc above {thr:.0%} sure it is bad")
         rt.motor(1)
         # Home the rail before any move that assumes a homed axis:
         # set_axis_with_stop configures the axis + PID and homes against

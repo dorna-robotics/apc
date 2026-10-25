@@ -38,14 +38,13 @@ stack_size: 200
 in_1: [0, 0, 0, 0, 0, 0, 0]
 in_2: [0, 0, 0, 0, 0, 0, 0]
 
-# Classifier sensitivity — how sure the pass/fail model must be before a
-# disc PASSES its visual check: high (a pass needs 75 %), medium (50 %,
-# the model's own call), low (25 %), or ignore (no classifier at all —
-# the detector still has to see a disc; the sort is by the reading
+# Classifier sensitivity — how sure the model must be that a disc is BAD
+# before it fails it: low (over 70 %), medium (over 50 %, the model's own
+# call), high (over 40 %, catches the most), or ignore (no classifier at
+# all — the detector still has to see a disc; the sort is by the reading
 # alone). The threshold table is CLS_MODES in actions.py.
-# The classifier sees the disc's masked FACE (vision/disc_cls.yaml): until
-# the face model is trained the weights there are the old whole-disc
-# model's, so choose ignore on the setup screen.
+# The classifier sees the disc's masked FACE (vision/disc_cls.yaml, the
+# face model disc_cls.pkl).
 classifier: medium
 
 # THE RING — the checks on the disc's circles, after the detector

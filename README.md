@@ -19,8 +19,7 @@ same `ring_offset` — no chip check there: from the top the chipped
 discs' edges read whole. Last, the classifier judges the disc's masked face — a circle
 10 px inside the band's inner edge (the face's own edge, both cameras),
 grey outside — cut exactly as its training crops were
-(`vision/disc_cls.yaml`; until the face model is trained, run with the
-classifier on Ignore). Chip and concentric have an Ignore too: an ignored
+(`vision/disc_cls.yaml`, the face model `disc_cls.pkl`). Chip and concentric have an Ignore too: an ignored
 check is skipped, and the circles are looked for only while a check
 uses them. Every disc's measured dent, offset and
 edge ÷ box ratio are in the records sheet, and the pendant's **Last
@@ -31,8 +30,9 @@ keeps its card — the disc's square at 800 px and its numbers — in
 `records/<run>/fails/` (docs/out-holders.md) when the run's
 `save_fail_pictures` is on (off by default). How sure the classifier must
 be is the run's
-`classifier` setting on the setup screen: high (a pass needs 75 %),
-medium (50 %, the model's own call), low (25 %), or ignore (no
+`classifier` setting on the setup screen — how sure the model must be
+that a disc is bad before it fails it: low (over 70 %), medium (over
+50 %, the model's own call), high (over 40 %), or ignore (no
 classifier at all — the detector still has to see a disc, the
 capacitance reading alone sorts). A fail at either camera sends the disc to
 the fail column with no measurement. A disc the detector does not see
@@ -116,7 +116,7 @@ tab.
 | `disc_od.yaml` | `disc.pkl` | `od` — disc detector, 416 px, int8 | finding the disc in a station frame |
 | `disc_ring.yaml` | — | `elp` on the yellow band (colour mask, the edge's dent) | the station camera's circles: chip, concentric |
 | `disc_ring_top.yaml` | — | `ring` — the thin band's two edges along rays | the robot camera's circles: concentric, no chip |
-| `disc_cls.yaml` | the face model (the old `disc_pass_fail_cropped.pkl` until it is trained) | `cls` — pass / fail on the masked face | the visual verdict, both cameras, last — drop the new weights here |
+| `disc_cls.yaml` | `disc_cls.pkl` — the face model, 640 px, int8 | `cls` — pass / fail on the masked face | the visual verdict, both cameras, last — drop the new weights here |
 
 `recipes.j2` registers six detections — `bottom_od` / `bottom_ring` /
 `bottom_cls` on the station camera, `top_od` / `top_ring` / `top_cls`

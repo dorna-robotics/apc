@@ -27,7 +27,7 @@
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
 //                [cx, cy, r], chip, dent, dent_at, dent_max, offset,
-//                off_max, cls {circle, state, p, min}, img, w, h} — chip
+//                off_max, cls {circle, state, p (fail probability), max}, img, w, h} — chip
 //                false: a camera without a chip check (the robot camera),
 //                its Chip tile not checked; img an
 //                rt.asset path (api.url makes it loadable), w × h the
@@ -528,7 +528,7 @@ function inspectionHtml(c) {
              !o ? "no circle the disc's size"
              : at === "concentric" && off == null ? "no inner circle"
              : ign.has("concentric") ? `edge <b>${Math.round(o[2] * 2)}</b> px · centres ignored`
-             : off != null ? `offset <b>${off.toFixed(1)}</b> px · max ${offMax}`
+             : off != null ? `centres <b>${off.toFixed(1)}</b> px apart · fails above ${offMax} px`
              : at === "chip" ? `edge <b>${Math.round(o[2] * 2)}</b> px · centres not checked`
              : "no inner circle",
              !o ? ["bad", "none"]
@@ -538,12 +538,12 @@ function inspectionHtml(c) {
              : at === "chip" ? ["off", "not checked"] : ["bad", "no inner"])}
       ${c.chip === false ? idle(3, "Chip", "Not checked", "No chip check on this camera")
              : ign.has("chip") ? idle(3, "Chip", "Ignored", "The chip check is ignored this run")
-             : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `dent <b>${dent.toFixed(1)}</b> px · max ${dentMax}`,
+             : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `notch <b>${dent.toFixed(1)}</b> px · fails above ${dentMax} px`,
              chip ? ["bad", "chip"] : ["ok", "whole"])}
       ${!ran[4] ? idle(4, "Classifier")
              : cs === "off" && !f ? idle(4, "Classifier", "Ignored", "The classifier is ignored this run")
              : tile(4, "Classifier", t4,
-             cs === "off" ? "classifier ignored" : `pass <b>${num(c.cls.p).toFixed(2)}</b> · min ${num(c.cls.min).toFixed(2)}`,
+             cs === "off" ? "classifier ignored" : `fail <b>${Math.round(num(c.cls.p) * 100)}%</b> · fails above ${Math.round(num(c.cls.max) * 100)}%`,
              cs === "off" ? ["off", "ignored"] : cs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
     </div></div>`;
 }
