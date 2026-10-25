@@ -514,7 +514,7 @@ function bodyHtml(st) {
         </div>
         <div class="hint">${esc(st.save_fail_pictures
           ? "On — each one goes to records/<run>/fails/ with its numbers, about 50–90 KB a disc"
-          : "Off — nothing saved; the records sheet still says why each disc failed")}</div>
+          : "Off — nothing saved")}</div>
       </div>
     </div>
   </div>`;
