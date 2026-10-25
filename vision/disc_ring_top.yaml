@@ -9,8 +9,7 @@
 #   width   px past the face's edge the band's outer edge is looked for
 # actions.py judges the two centres against the run's ring_offset — no
 # chip check here (no dent): from the top the chipped discs' edges read
-# whole; the chips show from the bottom. Measured (89 discs, 2026-10-23):
-# both circles on 87, centres repeatable to 0.05 / 0.2 px.
+# whole; the chips show from the bottom.
 detection:
   cmd: ring
   inner: l

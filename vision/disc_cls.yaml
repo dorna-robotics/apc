@@ -7,10 +7,7 @@
 #
 # THE MODEL. ``path`` below is the face model: disc_cls.pkl, trained on the
 # masked faces of both cameras (2026-10-24: mobilenetv4_conv_small, 640 px,
-# int8; Roboflow disc_pass_fail, duplicates removed). Validation, 59 fails /
-# 284 good: failing above 50 % sure it missed 20 fails and rejected 12 good
-# discs, above 70 % 31 / 7, above 40 % 14 / 22 — the run's classifier
-# medium / low / high (actions.py CLS_MODES). A new model: drop its .pkl beside this
+# int8; Roboflow disc_pass_fail, duplicates removed). A new model: drop its .pkl beside this
 # file, name it here — nothing else changes. Every setting of the detection is
 # here; recipes.j2 only names this file (workspace docs/vision-guide.md §5
 # "Config files"). Every relative path here is relative to THIS folder

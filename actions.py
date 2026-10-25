@@ -224,9 +224,7 @@ FACE_MARGIN        = 10
 # number. low 70 % (fails only clear cases), medium 50 % (the model's own
 # call), high 40 % (catches the most). ignore skips the classifier
 # altogether — the detector still has to see a disc — and the sort is by
-# the reading alone. Measured on the face model (vision/disc_cls.yaml,
-# 59 fails / 284 good): low missed 31 fails and rejected 7 good discs,
-# medium 20 / 12, high 14 / 22. setup() writes CLS_MODE from the kwarg.
+# the reading alone. setup() writes CLS_MODE from the kwarg.
 CLS_MODES          = {"high": 0.40, "medium": 0.50, "low": 0.70, "ignore": None}
 CLS_MODE           = "medium"
 # The RING — the checks on the disc's circles, after the detector
@@ -235,14 +233,9 @@ CLS_MODE           = "medium"
 # §5). Two SENSITIVITIES, run parameters like the classifier's
 # (hmi/default.j2, the setup screen), written by setup():
 #   CHIP_MODES      the deepest dent the disc's edge may have, px — a chip
-#                   is a notch in the band. The station camera. Measured on
-#                   the disc_cls set (90 crops, 2026-10-22): chips 3.6–15
-#                   px, good discs 1.1–3.1 px. The margin is thin: confirm
-#                   on a fresh set.
+#                   is a notch in the band. The station camera.
 #   OFFSET_MODES    the most the band's two centres may be apart, px. Both
-#                   cameras. Measured: bottom, good discs 1.4–4.5 px; top
-#                   (89 discs, unlabelled, 2026-10-23) 0.1–7.7 px. No
-#                   off-centre disc measured yet — tighten once one is.
+#                   cameras.
 # high is the strictest (catches the most), low the most lenient; ignore
 # skips the check, as the classifier's (None: no threshold). The circles
 # are looked for only while a check uses them (_inspect).
@@ -759,7 +752,7 @@ def _inspect(action, cam, disc):
     card["det"] = {"conf": round(best.get("conf", 0), 2),
                    "box": [round(v, 1) for v in (min(xs), min(ys), max(xs), max(ys))]}
     if not card["circles"]:
-        action.ctx.runtime.step(f"{cam['name']}: chip, centres and classifier ignored, pass")
+        action.ctx.runtime.step(f"{cam['name']}: chip, off-centre and face checks ignored, pass")
         card["cls"] = {"circle": None, "state": "off"}
         return verdict("pass", "", {}, cam["od"])
     circles = _circles(action, cam, box)
@@ -779,7 +772,7 @@ def _inspect(action, cam, disc):
                    [round(face["center"][0], 1), round(face["center"][1], 1),
                     round(_diameter(face["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
     if threshold is None:
-        action.ctx.runtime.step(f"{cam['cls']}: classifier ignored, pass")
+        action.ctx.runtime.step(f"{cam['cls']}: face check ignored, pass")
         return verdict("pass", "", m, frame)
     res = action.ctx.recipes[cam["cls"]].detect(roi=_face_roi(face), sim_return=[{"cls": "pass", "conf": 0.99}])
     if res is None:
@@ -789,7 +782,7 @@ def _inspect(action, cam, disc):
         f"{cam['cls']}: the face, {_diameter(face['corners']) - 2 * FACE_MARGIN:.0f} px across, "
         f"fail {1.0 - _pass_prob(res):.2f}, fails above {threshold:.2f} ({CLS_MODE}) -> {v}")
     card["cls"].update(state=v, p=round(1.0 - _pass_prob(res), 2), max=threshold)
-    return verdict(v, "" if v == "pass" else f"{cam['name']}: classifier fail", m, frame,
+    return verdict(v, "" if v == "pass" else f"{cam['name']}: face", m, frame,
                    None if v == "pass" else "classifier")
 
 
@@ -1066,8 +1059,8 @@ class Start(Action):
         _publish(self, "Starting — homing", last_disc=None, last_c=None,
                  last_c_unit=None, last_result=None)
         thr = CLS_MODES[CLS_MODE]
-        rt.step("classifier: ignored — the detector must see a disc, the reading sorts"
-                if thr is None else f"classifier: {CLS_MODE} — fails a disc above {thr:.0%} sure it is bad")
+        rt.step("face check: ignored — the detector must see a disc, the reading sorts"
+                if thr is None else f"face check: {CLS_MODE} — fails a disc above {thr:.0%} sure it is a fail")
         rt.motor(1)
         # Home the rail before any move that assumes a homed axis:
         # set_axis_with_stop configures the axis + PID and homes against

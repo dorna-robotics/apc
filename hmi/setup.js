@@ -48,33 +48,38 @@ export const SLOTS_N = 7;                                   // SLOTS: A1..A7
 export const SLOTS   = Array.from({ length: SLOTS_N }, (_, i) => `A${i + 1}`);
 export const IN_KEYS = ["in_1", "in_2"];                    // the kwargs, consumed in this order
 
-// The Inspection step's checks, each one card in one pattern: the title
-// names the check and what it measures; Ignore · Low · Medium · High run
+// The Inspection step's checks, in the order a disc meets them — chip,
+// off-centre, face (actions.py _judge, then the classifier) — each one
+// card in one pattern: the title
+// names the check and what it measures (no camera — the operator does not
+// need it); Ignore · Low · Medium · High run
 // left to right, least to most strict — the way a dial reads — and every
-// hint says "Fails …" with the number, then what it was measured to do,
-// so nobody has to guess which way "high" cuts.
+// hint says "Fails …" with the number, so nobody has to guess which way
+// "high" cuts. No measured performance here: that is engineering data
+// (actions.py, the yaml), not the operator's.
 //
-// The classifier — the ``classifier`` kwarg: how sure the model must be
-// that a disc is bad. Mirrors CLS_MODES in actions.py (fail above X).
+// The face check (the classifier — the ``classifier`` kwarg; "Face" to the
+// operator, who need not know it is a model): how sure the model must be
+// that a disc is a fail. Mirrors CLS_MODES in actions.py (fail above X).
 const CLS_MODES = [
-  { key: "ignore", label: "Ignore", hint: "Off — the classifier fails no disc; the detector still has to see one" },
-  { key: "low",    label: "Low",    hint: "Fails a disc when the model is over 70 % sure it is bad — misses about half the face defects, fails about 2.5 % of good discs" },
-  { key: "medium", label: "Medium", hint: "Fails a disc when the model is over 50 % sure it is bad (its own call) — misses about a third, fails about 4 % of good discs" },
-  { key: "high",   label: "High",   hint: "Fails a disc when the model is over 40 % sure it is bad — misses about a quarter, fails about 8 % of good discs" },
+  { key: "ignore", label: "Ignore", hint: "Off — the face check fails no disc" },
+  { key: "low",    label: "Low",    hint: "Fails a disc when the face check is over 70 % sure it is a fail" },
+  { key: "medium", label: "Medium", hint: "Fails a disc when the face check is over 50 % sure it is a fail" },
+  { key: "high",   label: "High",   hint: "Fails a disc when the face check is over 40 % sure it is a fail" },
 ];
 // The chip and off-centre checks — the ``ring_chip`` / ``ring_offset``
 // kwargs. Mirror CHIP_MODES / OFFSET_MODES in actions.py.
 const CHIP_MODES = [
   { key: "ignore", label: "Ignore", hint: "Off — a chipped disc is not failed for it" },
-  { key: "low",    label: "Low",    hint: "Fails a notch deeper than 5 px — lets small chips through" },
-  { key: "medium", label: "Medium", hint: "Fails a notch deeper than 3.5 px — good discs measured 1.1–3.1 px, chips 3.6–15 px" },
-  { key: "high",   label: "High",   hint: "Fails a notch deeper than 3 px — close to a good disc's 3.1 px, may fail some" },
+  { key: "low",    label: "Low",    hint: "Fails a notch deeper than 5 px" },
+  { key: "medium", label: "Medium", hint: "Fails a notch deeper than 3.5 px" },
+  { key: "high",   label: "High",   hint: "Fails a notch deeper than 3 px" },
 ];
 const OFFSET_MODES = [
   { key: "ignore", label: "Ignore", hint: "Off — an off-centre disc is not failed for it" },
-  { key: "low",    label: "Low",    hint: "Fails when the band's two centres are more than 12 px apart" },
-  { key: "medium", label: "Medium", hint: "Fails when the centres are more than 8 px apart — good discs measured 1.4–4.5 px (bottom), 0.1–7.7 px (top)" },
-  { key: "high",   label: "High",   hint: "Fails when the centres are more than 5 px apart — may fail some good discs on the top camera" },
+  { key: "low",    label: "Low",    hint: "Fails when the centres are more than 12 px apart" },
+  { key: "medium", label: "Medium", hint: "Fails when the centres are more than 8 px apart" },
+  { key: "high",   label: "High",   hint: "Fails when the centres are more than 5 px apart" },
 ];
 // A sensitivity from a saved value — medium for anything not offered.
 const pick = (v, modes) => (modes.some(m => m.key === String(v).toLowerCase()) ? String(v).toLowerCase() : "medium");
@@ -475,16 +480,7 @@ function bodyHtml(st) {
     return stepBar(st, V) + `
   <div class="stack">
     <div class="card">
-      <h4>Classifier — how sure the model must be that the face is bad · both cameras</h4>
-      <div class="inner">
-        <div class="row seg">${CLS_MODES.map(m =>
-          `<button type="button" class="pos${st.classifier === m.key ? " armed" : ""}" data-cls="${m.key}">${esc(m.label)}</button>`).join("")}
-        </div>
-        <div class="hint">${esc((CLS_MODES.find(m => m.key === st.classifier) || CLS_MODES.find(m => m.key === "medium")).hint)}</div>
-      </div>
-    </div>
-    <div class="card">
-      <h4>Chip — the deepest notch in the band's edge · bottom camera</h4>
+      <h4>Chip — the deepest notch in the band's edge</h4>
       <div class="inner">
         <div class="row seg">${CHIP_MODES.map(m =>
           `<button type="button" class="pos${st.ring_chip === m.key ? " armed" : ""}" data-ring="ring_chip" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
@@ -493,7 +489,7 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Off-centre — how far apart the band's two centres are · both cameras</h4>
+      <h4>Off-centre — how far apart the band's two centres are</h4>
       <div class="inner">
         <div class="row seg">${OFFSET_MODES.map(m =>
           `<button type="button" class="pos${st.ring_offset === m.key ? " armed" : ""}" data-ring="ring_offset" data-v="${m.key}">${esc(m.label)}</button>`).join("")}
@@ -502,7 +498,16 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Fail pictures — save a picture of each disc a camera fails</h4>
+      <h4>Face — how sure the face check must be that the disc is a fail</h4>
+      <div class="inner">
+        <div class="row seg">${CLS_MODES.map(m =>
+          `<button type="button" class="pos${st.classifier === m.key ? " armed" : ""}" data-cls="${m.key}">${esc(m.label)}</button>`).join("")}
+        </div>
+        <div class="hint">${esc((CLS_MODES.find(m => m.key === st.classifier) || CLS_MODES.find(m => m.key === "medium")).hint)}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Fail pictures — save a picture of each disc that fails inspection</h4>
       <div class="inner">
         <div class="row seg">${[[false, "Off"], [true, "On"]].map(([v, l]) =>
           `<button type="button" class="pos${st.save_fail_pictures === v ? " armed" : ""}" data-pics="${v}">${l}</button>`).join("")}

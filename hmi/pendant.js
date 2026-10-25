@@ -511,7 +511,7 @@ function inspectionHtml(c) {
   // tile's own outline, and why: where the disc stopped, that the run
   // ignores the check, or (c.chip false) that this camera has none.
   const stoppedAt = { detector: "Detector", circles: "Circles", chip: "Chip", concentric: "Circles",
-                      classifier: "Classifier" }[at] || "";
+                      classifier: "Face" }[at] || "";
   const idle = (n, title, head = "Not run", why = `Stopped at ${esc(stoppedAt)}`) => `<div class="tile">
       <div class="frame ph"><div class="ph-in">${PH_ICON[n]}<b>${head}</b><span>${why}</span></div></div>
     <div class="cap"><span class="n">${n}</span>${title}<span class="st off">${head.toLowerCase()}</span></div></div>`;
@@ -540,10 +540,10 @@ function inspectionHtml(c) {
              : ign.has("chip") ? idle(3, "Chip", "Ignored", "The chip check is ignored this run")
              : !ran[3] ? idle(3, "Chip") : tile(3, "Chip", t3, `notch <b>${dent.toFixed(1)}</b> px · fails above ${dentMax} px`,
              chip ? ["bad", "chip"] : ["ok", "whole"])}
-      ${!ran[4] ? idle(4, "Classifier")
-             : cs === "off" && !f ? idle(4, "Classifier", "Ignored", "The classifier is ignored this run")
-             : tile(4, "Classifier", t4,
-             cs === "off" ? "classifier ignored" : `fail <b>${Math.round(num(c.cls.p) * 100)}%</b> · fails above ${Math.round(num(c.cls.max) * 100)}%`,
+      ${!ran[4] ? idle(4, "Face")
+             : cs === "off" && !f ? idle(4, "Face", "Ignored", "The face check is ignored this run")
+             : tile(4, "Face", t4,
+             cs === "off" ? "face check ignored" : `fail <b>${Math.round(num(c.cls.p) * 100)}%</b> · fails above ${Math.round(num(c.cls.max) * 100)}%`,
              cs === "off" ? ["off", "ignored"] : cs === "pass" ? ["ok", "pass"] : ["bad", "fail"])}
     </div></div>`;
 }
