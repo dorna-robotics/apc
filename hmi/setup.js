@@ -38,7 +38,7 @@
 // Step 2 — Final checks. The things the robot cannot verify and a run
 // breaks on: the OUT holders empty (the drop counter starts at zero), the
 // anode clear and the cathode up (the first PlaceAnode lands there), the
-// meter on and in RMT mode (Measure pauses on anything else). Bench
+// meter on and connected (the run puts it in RMT; Measure pauses on anything else). Bench
 // confirmations — ticked every time, never saved with the parameters.
 
 import { kitCss, wellCss, esc } from "/orchestrator/hmi-kit/kit.js";
@@ -202,7 +202,9 @@ export const CSS = kitCss + wellCss({
    here is red. The same stepper as bna's setup. */
 .hmi .stepbar { display:flex; gap:var(--space-3); align-items:center; flex-wrap:wrap;
   padding-bottom:var(--space-3); margin-bottom:var(--space-4);
-  border-bottom:1px solid var(--border); }
+  border-bottom:1px solid var(--border);
+  /* stays on top while a step scrolls — the modal's body is the scroller */
+  position:sticky; top:0; z-index:5; background:var(--surface); padding-top:var(--space-2); }
 .hmi .stepbar .grow { flex:1 1 auto; }
 .hmi .stepper { display:flex; align-items:stretch; height:38px; border-radius:999px;
   overflow:hidden; background:var(--surface); flex:none; }
@@ -255,6 +257,30 @@ export const CSS = kitCss + wellCss({
 .hmi .check.on { border-color:color-mix(in srgb, var(--accent) 45%, var(--border));
   background:color-mix(in srgb, var(--accent) 5%, var(--surface)); }
 .hmi .check .muted { color:var(--muted); }
+/* the Measurement step's sliders: one track (two thumbs for a window,
+   one for a maximum), the value, Reset — one row. The filled part is what
+   passes. The two inputs lie on the same track; only their thumbs take
+   the pointer, so each thumb can be dragged where it sits. */
+.hmi .slide { display:grid; grid-template-columns:minmax(0, 1fr) 190px auto; align-items:center;
+  gap:var(--space-4); width:min(720px, 100%); }
+.hmi .slide .sl-v { font-variant-numeric:tabular-nums; font-weight:700; text-align:right; white-space:nowrap; }
+.hmi .dual { position:relative; height:28px; --t:18px; }
+.hmi .dual .track, .hmi .dual .fill { position:absolute; top:50%; height:6px; margin-top:-3px; border-radius:3px; }
+.hmi .dual .track { left:calc(var(--t) / 2); right:calc(var(--t) / 2); background:var(--surface3, var(--border)); }
+.hmi .dual .fill { background:var(--accent);
+  left:calc(var(--t) / 2 + (100% - var(--t)) * var(--lo));
+  width:calc((100% - var(--t)) * (var(--hi) - var(--lo))); }
+.hmi .dual input[type=range] { position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0;
+  border:0; box-shadow:none; background:none; pointer-events:none; -webkit-appearance:none; appearance:none; }
+.hmi .dual input[type=range]::-webkit-slider-runnable-track { background:none; }
+.hmi .dual input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; pointer-events:auto;
+  width:var(--t); height:var(--t); border-radius:50%; background:var(--surface); border:3px solid var(--accent);
+  box-shadow:0 1px 4px rgba(0,0,0,.25); cursor:grab; }
+.hmi .dual input[type=range]::-moz-range-thumb { pointer-events:auto; width:12px; height:12px; border-radius:50%;
+  background:var(--surface); border:3px solid var(--accent); box-shadow:0 1px 4px rgba(0,0,0,.25); cursor:grab; }
+.hmi .dual input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow:var(--glow); }
+.hmi[data-frozen="1"] .dual input[type=range]::-webkit-slider-thumb { cursor:not-allowed; }
+.hmi[data-frozen="1"] .dual { opacity:.6; }
 .hmi[data-frozen="1"] .check { cursor:default; }
 `;
 
@@ -288,6 +314,32 @@ function initial(api, key, fallback) {
   return fallback;
 }
 
+// The Measurement step's sliders — the ``c_min_pf`` / ``c_max_pf`` /
+// ``d_max`` kwargs (Sort in actions.py). The ranges are what the screen
+// offers; the defaults live in hmi/default.j2.
+const C_RANGE = { min: 20000, max: 60000, step: 100 };      // pF
+const D_RANGE = { min: 0, max: 0.1, step: 0.001 };
+const pfTxt = v => Math.round(v).toLocaleString("en-US");
+const cHint = st => `Fails a disc with C below ${pfTxt(st.c_min_pf)} pF or above ${pfTxt(st.c_max_pf)} pF`;
+const dHint = st => `Fails a disc with D above ${st.d_max.toFixed(3)}`;
+const cOut = st => `${pfTxt(st.c_min_pf)} – ${pfTxt(st.c_max_pf)} pF`;
+const dOut = st => `≤ ${st.d_max.toFixed(3)}`;
+const frac = (v, r) => Math.min(1, Math.max(0, (v - r.min) / (r.max - r.min)));
+// One track: two thumbs (lo, hi) for a window, one (hi) for a maximum —
+// the filled part is what passes. ``--lo`` / ``--hi`` (0..1) place it.
+function rangeSlider(name, r, lo, hi, out) {
+  const thumb = (key, v, label) => `<input type="range" data-slider="${key}" data-range="${name}"
+    min="${r.min}" max="${r.max}" step="${r.step}" value="${v}" aria-label="${esc(label)}">`;
+  return `<div class="slide">
+    <div class="dual" data-dual="${name}" style="--lo:${lo ? frac(lo.v, r) : 0};--hi:${frac(hi.v, r)}">
+      <div class="track"></div><div class="fill"></div>
+      ${lo ? thumb(lo.key, lo.v, "Minimum") : ""}${thumb(hi.key, hi.v, "Maximum")}
+    </div>
+    <span class="sl-v" data-out="${name}">${esc(out)}</span>
+    <button type="button" class="reset" data-reset="${name}">Reset</button>
+  </div>`;
+}
+
 // The bench as the run's parameters describe it — the one state the
 // setup screen edits and the Replan view reads (api.values = what Start
 // sent). The checks are bench confirmations: never restored, never saved.
@@ -298,7 +350,18 @@ export function benchState(api) {
                ring_chip: pick(initial(api, "ring_chip", "medium"), CHIP_MODES),
                ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES),
                // keep each visual fail's picture in the run's records
-               save_fail_pictures: initial(api, "save_fail_pictures", false) === true };
+               save_fail_pictures: initial(api, "save_fail_pictures", false) === true,
+               // the measurement window (hmi/default.j2): pF, pF, D
+               c_min_pf: Number(initial(api, "c_min_pf", 34000)),
+               c_max_pf: Number(initial(api, "c_max_pf", 41000)),
+               d_max: Number(initial(api, "d_max", 0.02)),
+               // the meter's open / short calibration at the start of the run
+               calibrate_meter: initial(api, "calibrate_meter", true) !== false };
+  // the schema's own defaults, for the Measurement step's Reset buttons
+  const noValues = { schema: api && api.schema };
+  st.defaults = { c_min_pf: Number(initial(noValues, "c_min_pf", 34000)),
+                  c_max_pf: Number(initial(noValues, "c_max_pf", 41000)),
+                  d_max: Number(initial(noValues, "d_max", 0.02)) };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
   const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
   if (CLS_MODES.some(m => m.key === c)) st.classifier = c;
@@ -339,7 +402,7 @@ const CHECKS = [
     sub: "the drop counter starts at zero — a leftover disc would be stacked on" },
   { key: "anode", text: "The anode is clear.",
     sub: "the first disc is placed there as soon as it is inspected" },
-  { key: "meter", text: "The BK 879B is on and in RMT mode.",
+  { key: "meter", text: "The BK 879B is on and connected by USB.",
     sub: "Measure pauses the run on anything else" },
 ];
 const checksOk = st => CHECKS.every(c => st.checks[c.key]);
@@ -444,9 +507,10 @@ function stepBar(st, V) {
   // loaded stack; the classifier always has a choice (it defaults); every
   // final check is ticked.
   const STEPS = [
-    { key: "bench",      title: "Bench",        ok: !V.errs.length },
-    { key: "classifier", title: "Inspection",   ok: true },
-    { key: "check",      title: "Final checks", ok: checksOk(st) },
+    { key: "bench",      title: "Bench",             ok: !V.errs.length },
+    { key: "measure",    title: "Measurement",       ok: st.c_min_pf < st.c_max_pf },
+    { key: "classifier", title: "Visual inspection", ok: true },
+    { key: "check",      title: "Final checks",      ok: checksOk(st) },
   ];
   const k = STEPS.findIndex(x => x.key === st.step);
   const stepper = STEPS.map(x => {
@@ -476,6 +540,36 @@ function checksHtml(st) {
 
 function bodyHtml(st) {
   const V = check(st);
+  if (st.step === "measure") {
+    return stepBar(st, V) + `
+  <div class="stack">
+    <div class="card">
+      <h4>Capacitance (C) — the range a disc must read inside to pass</h4>
+      <div class="inner">
+        ${rangeSlider("cap", C_RANGE, { key: "c_min_pf", v: st.c_min_pf }, { key: "c_max_pf", v: st.c_max_pf }, cOut(st))}
+        <div class="hint" id="c-hint">${esc(cHint(st))}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Dissipation factor (D) — the most a disc may read to pass</h4>
+      <div class="inner">
+        ${rangeSlider("d", D_RANGE, null, { key: "d_max", v: st.d_max }, dOut(st))}
+        <div class="hint" id="d-hint">${esc(dHint(st))}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Meter calibration — open and short, at the start of the run</h4>
+      <div class="inner">
+        <div class="row seg">${[[false, "Off"], [true, "On"]].map(([v, l]) =>
+          `<button type="button" class="pos${st.calibrate_meter === v ? " armed" : ""}" data-cal="${v}">${l}</button>`).join("")}
+        </div>
+        <div class="hint">${esc(st.calibrate_meter
+          ? "On — the run guides you through it on the meter before the first disc"
+          : "Off — the meter keeps its last calibration")}</div>
+      </div>
+    </div>
+  </div>`;
+  }
   if (st.step === "classifier") {
     return stepBar(st, V) + `
   <div class="stack">
@@ -581,10 +675,45 @@ function render(wrap, st) {
       if (seg) seg.classList.toggle("done", checksOk(st));
     };
   });
+  // A slider moves its own number as it drags (no redraw: a redraw would
+  // drop the thumb mid-drag); min and max of the capacitance keep apart.
+  wrap.querySelectorAll("input[data-slider]").forEach(inp => {
+    inp.oninput = () => {
+      if (frozen()) { inp.value = st[inp.dataset.slider]; return; }
+      const k = inp.dataset.slider;
+      let v = Number(inp.value);
+      if (k === "c_min_pf") v = Math.min(v, st.c_max_pf - C_RANGE.step);
+      if (k === "c_max_pf") v = Math.max(v, st.c_min_pf + C_RANGE.step);
+      inp.value = v; st[k] = v;
+      const name = inp.dataset.range, r = name === "cap" ? C_RANGE : D_RANGE;
+      const dual = wrap.querySelector(`[data-dual="${name}"]`);
+      if (name === "cap") { dual.style.setProperty("--lo", frac(st.c_min_pf, r)); dual.style.setProperty("--hi", frac(st.c_max_pf, r)); }
+      else dual.style.setProperty("--hi", frac(st.d_max, r));
+      wrap.querySelector(`[data-out="${name}"]`).textContent = name === "cap" ? cOut(st) : dOut(st);
+      const h = wrap.querySelector(name === "cap" ? "#c-hint" : "#d-hint");
+      if (h) h.textContent = name === "cap" ? cHint(st) : dHint(st);
+    };
+  });
+  // Reset: back to the project's defaults (hmi/default.j2)
+  wrap.querySelectorAll("[data-reset]").forEach(b => {
+    b.onclick = () => {
+      if (frozen()) return;
+      const keys = b.dataset.reset === "cap" ? ["c_min_pf", "c_max_pf"] : ["d_max"];
+      for (const k of keys) st[k] = st.defaults[k];
+      render(wrap, st);
+    };
+  });
   wrap.querySelectorAll("[data-cls]").forEach(b => {
     b.onclick = () => {
       if (frozen()) return;
       st.classifier = b.dataset.cls;
+      render(wrap, st);
+    };
+  });
+  wrap.querySelectorAll("[data-cal]").forEach(b => {
+    b.onclick = () => {
+      if (frozen()) return;
+      st.calibrate_meter = b.dataset.cal === "true";
       render(wrap, st);
     };
   });
@@ -663,6 +792,10 @@ export default {
       ring_chip: _st.ring_chip,
       ring_offset: _st.ring_offset,
       save_fail_pictures: _st.save_fail_pictures,
+      c_min_pf: _st.c_min_pf,
+      c_max_pf: _st.c_max_pf,
+      d_max: _st.d_max,
+      calibrate_meter: _st.calibrate_meter,
     };
   },
 

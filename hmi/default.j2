@@ -38,6 +38,22 @@ stack_size: 200
 in_1: [0, 0, 0, 0, 0, 0, 0]
 in_2: [0, 0, 0, 0, 0, 0, 0]
 
+# THE MEASUREMENT — a disc both cameras passed is clamped and read; it
+# passes only inside this window (Sort in actions.py, set by setup()):
+#   c_min_pf, c_max_pf  the capacitance, pF, it must read between
+#   d_max               the most dissipation factor D (the meter's second
+#                       reading in capacitance mode) it may read
+c_min_pf: 34000
+c_max_pf: 41000
+d_max: 0.02
+
+# The meter's open / short calibration at the start of the run
+# (CalibrateMeter in actions.py): the run sets the meter up, lifts and
+# lowers the cathode on the bare anode, and waits while the operator
+# presses REL on the meter. The meter keeps a calibration until it is
+# switched off; false skips it.
+calibrate_meter: true
+
 # Classifier sensitivity — how sure the model must be that a disc is BAD
 # before it fails it: low (over 70 %), medium (over 50 %, the model's own
 # call), high (over 40 %, catches the most), or ignore (no classifier at

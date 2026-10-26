@@ -9,8 +9,10 @@ a stack, the earlier it came through.
 
 ## Pass 1, Pass 2 — the good discs
 
-A disc passed by both cameras whose capacitance reading is inside the
-window (`Sort.C_MIN … C_MAX`, `actions.py`).
+A disc passed by both cameras whose measurement is inside the window:
+capacitance between the run's `c_min_pf` and `c_max_pf` (34,000–41,000 pF
+by default) and dissipation factor D at most `d_max` (0.02) — the setup
+screen's Measurement step (`Sort`, `actions.py`).
 
 A pass disc goes to the **same position it was picked from**, in the
 pass holder of the same number: **In 1 A3 → Pass 1 A3**, **In 2 A5 →
@@ -89,7 +91,8 @@ One row per disc in `records/<run>/records.csv`:
 | `out` | `Pass 1 A3`, `Fail 1 A7`, `Fail 1 A4 (empty hand)` | holder and position; `(empty hand)` = nothing was dropped or counted |
 | `reason` | `C = 4.7e-07`, `bottom camera: chip`, `bottom camera: off-centre`, `top camera: off-centre`, `bottom camera: face anomaly`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
 | `ring_dent_px`, `ring_dent_at`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (`top_ring_offset_px`, `top_ring_box_ratio` the robot camera's) — choose the run's sensitivities from these |
-| `c_f` | farads | the reading, when the disc was measured |
+| `c_f` | farads | the capacitance, when the disc was measured |
+| `d` | — | the dissipation factor D, when the disc was measured |
 | `visual_card` | `fails/disc_007_bottom.jpg` | a camera fail's card, kept beside the sheet |
 
 The pendant shows the same: a count in every OUT position, the pass /
@@ -115,7 +118,6 @@ sheet has no `visual_card`; `reason` still says why each disc failed.
 | Fail 1 | A4 → A6 · Visual | a camera said fail, or saw no disc | station camera (`Reject`), robot camera (`Sort`) |
 | Fail 1 | A7 · Stuck | a disc was still on the anode after the pick | robot camera (`CheckAnode`) |
 
-Set in `actions.py`: the fail lanes (`LANES`), the pass mirror (`_lane`), the window (`Sort.C_MIN`,
-`Sort.C_MAX`), the blow tries (`ClearAnode.MAX_BLOWS`), the empties
-that end a position (`EMPTY_RUN_ENDS_COLUMN`). The stack size is
-`stack_size` in `hmi/default.j2`.
+Set in `actions.py`: the fail lanes (`LANES`), the pass mirror (`_lane`), the blow tries (`ClearAnode.MAX_BLOWS`), the empties
+that end a position (`EMPTY_RUN_ENDS_COLUMN`). The stack size and the
+measurement window (`c_min_pf`, `c_max_pf`, `d_max`) are in `hmi/default.j2`.

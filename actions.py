@@ -55,7 +55,8 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     is a fail too, never a pause.
    8. CathodeDown   drive the rotating cylinder down so the cathode contacts
                     the disc (clamped anode ↔ cathode).
-   9. Measure       read the multimeter capacitance → record it for the disc.
+   9. Measure       read the multimeter: capacitance and dissipation factor D
+                    → record them for the disc.
   10. CathodeUp     retract the cylinder (cathode up).
   11. PickAnode     suction-pick the disc back off the anode.
   12. CheckAnode    robot camera on the anode again: the detector alone.
@@ -64,12 +65,16 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     a STUCK fail and the anode must be cleared before the
                     next placement.
   13. Sort          drop it into an OUT holder by its LANE (LANES): a
-                    reading outside C_MIN..C_MAX → the fail holder's
+                    reading outside the window (C_MIN..C_MAX pF, D ≤ D_MAX) → the fail holder's
                     A1–A3; a camera fail → A4–A6; stuck → A7; a pass → the
                     pass holder and slot that MIRROR where it was picked
                     (in_2 A3 → out_good_2 A3).
 
-And ONE run-level action, ClearAnode, planned wherever the anode is not
+And TWO run-level actions. CalibrateMeter, once, after the anode is first
+seen clear and before the first disc is picked: the meter's open / short
+calibration — the operator presses the meter's buttons, the run lifts and
+lowers the cathode on the bare anode and waits (skipped when the run's
+``calibrate_meter`` is off). And ClearAnode, planned wherever the anode is not
 known clear — right after Start, and after any CheckAnode that saw a
 disc left behind: image the anode; nothing there → ``anode_clear``;
 something there → go to the anode's ``blow`` anchor, blow, and return
@@ -90,7 +95,7 @@ disc is terminal, so there is no line the batch regroups at and no
 
 AUDIT. One ``rt.record`` row per disc (project-guide §3), keyed
 ``disc <n>``: seeded by Create with where it came from, ``visual_bottom``
-/ ``visual_top`` by the two inspections, ``c_f`` by Measure on a valid
+/ ``visual_top`` by the two inspections, ``c_f`` and ``d`` by Measure on a valid
 reading, ``result`` / ``out`` / ``reason`` by the drop, ``status`` derived
 from the facts at Park. The run's ``records/<start>/records.csv``
 (launch.yaml ``records:``) is the client's sheet.
@@ -135,6 +140,7 @@ import queue
 import threading
 
 from workspace.bt import Action, predicate
+from workspace.components.multi_meter.bk879b_driver import Measurement
 
 
 # ── Per-disc facts (the action chain) ─────────────────────────────────
@@ -186,6 +192,10 @@ anode_free  = predicate("anode_free", capacity=True)    # anode/cathode station 
 # needs it and takes it away. Not a capacity fact: it is knowledge, set
 # by a camera and consumed by a placement.
 anode_clear = predicate("anode_clear")
+# The meter's open / short calibration is behind us — done by the operator
+# (CalibrateMeter), or skipped by the run's calibrate_meter. Run-level,
+# once: no disc is picked before it.
+meter_calibrated = predicate("meter_calibrated")
 
 
 # ── Exposed, tweakable parameters ─────────────────────────────────────
@@ -617,6 +627,7 @@ _CARD = _CardWorker()
 # only the square is decoded.
 FAIL_SIDE = 800
 SAVE_FAIL_PICTURES = False
+CALIBRATE_METER = True      # the run's calibrate_meter (CalibrateMeter)
 
 
 def _fail_name(card):
@@ -983,11 +994,22 @@ def setup(**kwargs):
     RING_OFFSET_MODE = _mode("ring_offset", OFFSET_MODES)
     RING_OFFSET_PX = OFFSET_MODES[RING_OFFSET_MODE]
 
+    # The measurement window (Sort): pF and D from the run.
+    Sort.C_MIN = _num("c_min_pf", float) * 1e-12
+    Sort.C_MAX = _num("c_max_pf", float) * 1e-12
+    Sort.D_MAX = _num("d_max", float)
+
     # Keep each visual fail's picture in the run's records (FAIL_SIDE).
     global SAVE_FAIL_PICTURES
     v = kwargs.get("save_fail_pictures")
     v = _schema_default("save_fail_pictures") if v is None else v
     SAVE_FAIL_PICTURES = v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "yes", "on")
+
+    # The meter's open / short calibration at the start of the run.
+    global CALIBRATE_METER
+    v = kwargs.get("calibrate_meter")
+    v = _schema_default("calibrate_meter") if v is None else v
+    CALIBRATE_METER = v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "yes", "on")
 
     INVENTORY.clear()
     LOADED.clear()
@@ -1179,6 +1201,86 @@ class ClearAnode(Action):
         return "blown"
 
 
+def _read_cd(rcp):
+    """One reading of the clamped disc: C (``m.primary``) and D
+    (``m.secondary``). None when the meter did not answer, or answered
+    with anything but D as the second reading. In sim the reading is a
+    disc inside the default window (37 nF, D 0.01)."""
+    m = rcp["meter"].read_capacitance(sim_return=Measurement(
+        primary=3.7e-8, primary_unit="F", secondary=0.01, secondary_unit="",
+        function="C", frequency="1000", raw="sim,3.7e-8,0.01", secondary_function="D"))
+    if m is None or m.secondary_function != "D":
+        return None
+    return m
+
+
+class CalibrateMeter(Action):
+    """Run-level, once, before the first disc: the BK 879B's OPEN and SHORT
+    calibration, which the meter can only do from its front panel — the
+    operator presses the buttons, the run sets the stage and waits:
+
+      1. the meter set to what every reading uses (C, D, parallel, 1 kHz)
+         — the calibration is made at the settings in force
+      2. the front panel handed back (RMT off: in remote mode its buttons
+         are disabled)
+      3. OPEN — the anode seen clear, the cathode up: the operator holds
+         REL 2 s, presses REL once, presses Resume
+      4. SHORT — the cathode down onto the bare anode: the operator holds
+         REL 2 s, presses REL once, presses Resume
+      5. the cathode up; the next reading takes remote control back
+
+    The run cannot see whether the meter took the calibration (there is no
+    remote query); doing it properly is the operator's. The calibration
+    holds until the meter is switched off. ``calibrate_meter`` off (the
+    setup screen's Measurement step): skipped, the meter keeps its last
+    one."""
+    params   = []
+    duration = 30
+    resource = "robot"
+    CYLINDER = "rotating_cylinder_mkb1630_1"
+
+    def pre(self):
+        return started() & anode_clear() & hand_empty() & ~meter_calibrated()
+
+    def eff(self):
+        return {"calibrated": (+meter_calibrated(),)}
+
+    def _wait(self, title, text):
+        """Pause on a pendant notice until the operator presses Resume."""
+        rt = self.ctx.runtime
+        rt.step(f"meter calibration: {title} — {text}")
+        _publish(self, f"Meter calibration — {title}",
+                 notice=dict(level="info", title=f"Meter calibration — {title}", text=text))
+        rt.pause()
+        rt.checkpoint()
+
+    def execute(self):
+        rt, rcp, ws = self.ctx.runtime, self.ctx.recipes, self.ctx.workspace
+        if not CALIBRATE_METER:
+            rt.step("meter calibration: off — the meter keeps its last calibration")
+            return "calibrated"
+        if _read_cd(rcp) is None or not rcp["meter"].go_local():
+            rt.step("meter calibration: the meter did not answer with C and D — check it is on "
+                    "and connected, then Resume", level="warning")
+            rt.pause()
+            rt.checkpoint()
+            return False                      # the planner selects this action again
+        ws.components[self.CYLINDER].disable()
+        self._wait("open (1 of 2)",
+                   "The anode is clear and the cathode is up. On the meter, hold REL for 2 s, "
+                   "then press REL once. When the normal reading is back, press Resume.")
+        rt.step("cathode down — on the bare anode")
+        ws.components[self.CYLINDER].enable()
+        self._wait("short (2 of 2)",
+                   "The cathode is down on the bare anode. On the meter, hold REL for 2 s, "
+                   "then press REL once. When the normal reading is back, press Resume.")
+        ws.components[self.CYLINDER].disable()
+        _read_cd(rcp)                         # takes remote control back
+        rt.step("meter calibration: done")
+        _publish(self, "Meter calibrated")    # takes the notice down
+        return "calibrated"
+
+
 class Create(Action):
     """Spawn the disc at its configured inventory position — the top of
     the remaining stack at its in-holder anchor (z = depth × Z_STEP)."""
@@ -1251,8 +1353,9 @@ class Pick(Action):
         # disc picked before the anode is clear leaves the run with nowhere
         # to go. The route planner takes an item's step before a run-level
         # one once the item has started (Create ran); this fact is what
-        # puts ClearAnode first.
-        return created(disc) & hand_empty() & anode_clear() & ~picked(disc)
+        # puts ClearAnode first. meter_calibrated: CalibrateMeter (on the
+        # bare anode) before the first disc is picked.
+        return created(disc) & hand_empty() & anode_clear() & meter_calibrated() & ~picked(disc)
 
     def eff(self, disc):
         # Disc leaves the feed into the hand: feed frees, hand fills.
@@ -1528,7 +1631,7 @@ class Measure(Action):
         rt, rcp = self.ctx.runtime, self.ctx.recipes
         rt.step(_progress_pct(self), level="progress")
         _publish(self, f"{_tag(disc)} — measuring")
-        m = rcp["meter"].read_capacitance()
+        m = _read_cd(rcp)
         if m is None:
             # No implicit retry. A missing reading is an operator problem
             # (meter unplugged, or knocked out of RMT mode), so pause and
@@ -1541,22 +1644,25 @@ class Measure(Action):
             # Measure from observed state. Resume → this action runs again
             # → still unavailable → pauses again. One read per execute().
             rt.count("measure", unavailable=1)
-            rt.step(f"disc {disc + 1}: meter unavailable — reconnect the meter "
-                    f"(check RMT is on), then Resume")
+            rt.step(f"disc {disc + 1}: the meter did not answer with C and D — check it is on "
+                    f"and connected, then Resume")
             rt.pause()
             rt.checkpoint()          # blocks until the operator resumes
             return False
         # Stash the measured value on the ctx so Sort can read it without
         # a planning fact (it's per-disc runtime data, not plan state).
+        # D is the meter's second reading in capacitance mode.
         self.ctx.meta.setdefault("disc_c", {})[disc] = m.primary
-        rt.step(f"disc {disc + 1}: C = {m.primary:g} {m.primary_unit}")
+        self.ctx.meta.setdefault("disc_d", {})[disc] = m.secondary
+        rt.step(f"disc {disc + 1}: C = {m.primary * 1e12:.0f} pF, D = {m.secondary:.4f} "
+                f"(pass: {Sort.C_MIN * 1e12:.0f}–{Sort.C_MAX * 1e12:.0f} pF, D ≤ {Sort.D_MAX:g})")
         rt.count("measure", n=1)
-        rt.record(_tag(disc), c_f=m.primary, c_unit=str(m.primary_unit))
+        rt.record(_tag(disc), c_f=m.primary, c_unit=str(m.primary_unit), d=m.secondary)
         # The value itself goes to the pendant's reading card (SI-scaled
         # there); the headline stays a step, not a number.
         _publish(self, f"{_tag(disc)} — measured",
-                 last_disc=disc + 1, last_c=m.primary, last_c_unit=str(m.primary_unit),
-                 last_result="pass" if Sort.C_MIN <= m.primary <= Sort.C_MAX else "fail")
+                 last_disc=disc + 1, last_c=m.primary, last_c_unit=str(m.primary_unit), last_d=m.secondary,
+                 last_result="pass" if Sort.inside(m.primary, m.secondary) else "fail")
         return "measured"
 
 
@@ -1702,12 +1808,22 @@ class CheckAnode(Action):
 
 class Sort(Action):
     """Drop the disc off the anode into an OUT holder: a top-camera fail
-    is bad outright; otherwise the measured capacitance decides."""
-    # Good/bad capacitance window (Farads). Defaulted WIDE so everything
-    # currently lands in "good" — set the real spec later. Where a disc
-    # lands by verdict is _lane (module level, shared with Reject).
-    C_MIN = 0.0
-    C_MAX = 1.0e9
+    is bad outright; otherwise the measurement decides — the capacitance
+    inside C_MIN..C_MAX and the dissipation factor at most D_MAX (``pass``,
+    else fail_measure). Where a disc lands by verdict is _lane (module
+    level, shared with Reject)."""
+    # The window — farads, and D unitless. setup() writes them from the
+    # run's c_min_pf / c_max_pf / d_max (hmi/default.j2, the setup screen's
+    # Measurement step); these are hmi/default.j2's defaults.
+    C_MIN = 34000e-12
+    C_MAX = 41000e-12
+    D_MAX = 0.02
+
+    @classmethod
+    def inside(cls, c, d):
+        """A reading inside the window: capacitance between C_MIN and
+        C_MAX, D at most D_MAX."""
+        return cls.C_MIN <= c <= cls.C_MAX and d <= cls.D_MAX
     # The place into ANY out holder (good and bad — Sort and Reject both
     # drop through _drop):
     #   soft_approach=True  stop at the gap above the slot and take the
@@ -1746,8 +1862,9 @@ class Sort(Action):
                 # — fail loudly rather than silently binning a good disc.
                 rt.step(f"disc {disc + 1}: no capacitance recorded — cannot sort", level="error")
                 return False
-            inside = self.C_MIN <= c <= self.C_MAX
-            lane, why = ("pass" if inside else "fail_measure"), f"C = {c:g}"
+            d = self.ctx.meta.get("disc_d", {}).get(disc)
+            inside = self.inside(c, d)
+            lane, why = ("pass" if inside else "fail_measure"), f"C = {c * 1e12:.0f} pF, D = {d:.4f}"
         return "sorted" if _drop(self, disc, lane, why) else False
 
 
@@ -1801,5 +1918,5 @@ class OperatorPark(Park):
 
 # The route — the order an item meets the actions (workspace.bt.protocol).
 # Being listed here is what makes an action part of the run.
-ROUTE = [Start, ClearAnode, Create, Pick, Present, InspectBottom, Reject, PlaceAnode, InspectTop,
+ROUTE = [Start, ClearAnode, CalibrateMeter, Create, Pick, Present, InspectBottom, Reject, PlaceAnode, InspectTop,
          CathodeDown, Measure, CathodeUp, PickAnode, CheckAnode, Sort, Park]

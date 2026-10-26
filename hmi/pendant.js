@@ -23,6 +23,7 @@
 //   every count the operator needs is in a well
 //   last_disc    number of the disc last measured
 //   last_c       its capacitance           last_c_unit  the meter's unit
+//   last_d       its dissipation factor D
 //   last_result  "pass" | "fail"
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
@@ -293,6 +294,7 @@ const CSS = `
 .reading .val { font-size:44px; font-weight:700; font-variant-numeric:tabular-nums;
   font-family:ui-monospace,Menlo,Consolas,monospace; line-height:1; }
 .reading .val small { font-size:var(--text-lg); font-weight:400; opacity:.6; }
+.reading .dval { font-size:var(--text-lg); font-weight:600; font-variant-numeric:tabular-nums; opacity:.75; }
 .verdict { font-size:var(--text-md); letter-spacing:.1em; text-transform:uppercase;
   font-weight:700; padding:4px 12px; border-radius:var(--radius-sm); }
 .verdict.pass { background:${C_GOOD}; color:${C_ON}; }
@@ -392,6 +394,7 @@ function readingHtml(v) {
   return `<div class="reading">
     <span class="note">${disc == null ? "Last disc" : `Disc ${disc}`}</span>
     <span class="val">${esc(fmtC(c, v.last_c_unit).v)}<small> ${esc(fmtC(c, v.last_c_unit).u)}</small></span>
+    ${num(v.last_d) == null ? "" : `<span class="dval">D ${num(v.last_d).toFixed(3)}</span>`}
     ${res ? `<span class="verdict ${res}">${res === "pass" ? "Passed" : "Failed"}</span>` : ""}
   </div>`;
 }
