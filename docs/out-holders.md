@@ -39,7 +39,7 @@ A camera said the disc is bad, or saw no disc at all:
 - **Bottom (station) camera, before the anode.** No circle the disc's
   size; a chip (its edge's deepest dent past the run's `ring_chip`); no
   inner circle of the band; or off-centre (beyond the run's
-  `ring_offset`); or the face check failed it (the run's `classifier`
+  `ring_offset`); or the face anomaly check failed it (the run's `classifier`
   sensitivity). The disc goes
   straight to A4 – A6 without a measurement. If the camera saw *no* disc, the hand
   still goes through the drop (the suction is never released mid-way),
@@ -47,7 +47,7 @@ A camera said the disc is bad, or saw no disc at all:
   do not move, so an empty hand never lifts the next real drop.
 - **Top (robot) camera, on the anode.** No circle the disc's size; no
   inner circle of its band; off-centre (beyond the run's `ring_offset`);
-  or the face check failed it. No chip check from the top — the chips
+  or the face anomaly check failed it. No chip check from the top — the chips
   show from the bottom. No clamp, no reading: the disc is
   picked back off the anode and dropped at A4 – A6, counted. "No disc"
   here counts too, since the bottom camera had seen it.
@@ -87,7 +87,7 @@ One row per disc in `records/<run>/records.csv`:
 |---|---|---|
 | `result` | `pass` / `fail` | which kind of holder |
 | `out` | `Pass 1 A3`, `Fail 1 A7`, `Fail 1 A4 (empty hand)` | holder and position; `(empty hand)` = nothing was dropped or counted |
-| `reason` | `C = 4.7e-07`, `bottom camera: chip`, `bottom camera: off-centre`, `top camera: off-centre`, `bottom camera: face`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
+| `reason` | `C = 4.7e-07`, `bottom camera: chip`, `bottom camera: off-centre`, `top camera: off-centre`, `bottom camera: face anomaly`, `top camera: no disc`, `anode still occupied after the pick` | why it went there |
 | `ring_dent_px`, `ring_dent_at`, `ring_offset_px`, `ring_box_ratio` | numbers | the station camera's circles, every disc it measured (`top_ring_offset_px`, `top_ring_box_ratio` the robot camera's) — choose the run's sensitivities from these |
 | `c_f` | farads | the reading, when the disc was measured |
 | `visual_card` | `fails/disc_007_bottom.jpg` | a camera fail's card, kept beside the sheet |

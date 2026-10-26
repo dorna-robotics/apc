@@ -752,7 +752,7 @@ def _inspect(action, cam, disc):
     card["det"] = {"conf": round(best.get("conf", 0), 2),
                    "box": [round(v, 1) for v in (min(xs), min(ys), max(xs), max(ys))]}
     if not card["circles"]:
-        action.ctx.runtime.step(f"{cam['name']}: chip, off-centre and face checks ignored, pass")
+        action.ctx.runtime.step(f"{cam['name']}: chip, off-centre and face anomaly checks ignored, pass")
         card["cls"] = {"circle": None, "state": "off"}
         return verdict("pass", "", {}, cam["od"])
     circles = _circles(action, cam, box)
@@ -772,7 +772,7 @@ def _inspect(action, cam, disc):
                    [round(face["center"][0], 1), round(face["center"][1], 1),
                     round(_diameter(face["corners"]) / 2 - FACE_MARGIN, 1)], "state": "off"}
     if threshold is None:
-        action.ctx.runtime.step(f"{cam['cls']}: face check ignored, pass")
+        action.ctx.runtime.step(f"{cam['cls']}: face anomaly check ignored, pass")
         return verdict("pass", "", m, frame)
     res = action.ctx.recipes[cam["cls"]].detect(roi=_face_roi(face), sim_return=[{"cls": "pass", "conf": 0.99}])
     if res is None:
@@ -782,7 +782,7 @@ def _inspect(action, cam, disc):
         f"{cam['cls']}: the face, {_diameter(face['corners']) - 2 * FACE_MARGIN:.0f} px across, "
         f"fail {1.0 - _pass_prob(res):.2f}, fails above {threshold:.2f} ({CLS_MODE}) -> {v}")
     card["cls"].update(state=v, p=round(1.0 - _pass_prob(res), 2), max=threshold)
-    return verdict(v, "" if v == "pass" else f"{cam['name']}: face", m, frame,
+    return verdict(v, "" if v == "pass" else f"{cam['name']}: face anomaly", m, frame,
                    None if v == "pass" else "classifier")
 
 
@@ -1059,8 +1059,8 @@ class Start(Action):
         _publish(self, "Starting — homing", last_disc=None, last_c=None,
                  last_c_unit=None, last_result=None)
         thr = CLS_MODES[CLS_MODE]
-        rt.step("face check: ignored — the detector must see a disc, the reading sorts"
-                if thr is None else f"face check: {CLS_MODE} — fails a disc above {thr:.0%} sure it is a fail")
+        rt.step("face anomaly check: ignored — the detector must see a disc, the reading sorts"
+                if thr is None else f"face anomaly check: {CLS_MODE} — fails a disc above {thr:.0%} sure it is a fail")
         rt.motor(1)
         # Home the rail before any move that assumes a homed axis:
         # set_axis_with_stop configures the axis + PID and homes against

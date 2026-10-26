@@ -58,14 +58,14 @@ export const IN_KEYS = ["in_1", "in_2"];                    // the kwargs, consu
 // "high" cuts. No measured performance here: that is engineering data
 // (actions.py, the yaml), not the operator's.
 //
-// The face check (the classifier — the ``classifier`` kwarg; "Face" to the
+// The face anomaly check (the classifier — the ``classifier`` kwarg; "Face anomaly" to the
 // operator, who need not know it is a model): how sure the model must be
 // that a disc is a fail. Mirrors CLS_MODES in actions.py (fail above X).
 const CLS_MODES = [
-  { key: "ignore", label: "Ignore", hint: "Off — the face check fails no disc" },
-  { key: "low",    label: "Low",    hint: "Fails a disc when the face check is over 70 % sure it is a fail" },
-  { key: "medium", label: "Medium", hint: "Fails a disc when the face check is over 50 % sure it is a fail" },
-  { key: "high",   label: "High",   hint: "Fails a disc when the face check is over 40 % sure it is a fail" },
+  { key: "ignore", label: "Ignore", hint: "Off — the face anomaly check fails no disc" },
+  { key: "low",    label: "Low",    hint: "Fails a disc when the face anomaly check is over 70 % sure it is a fail" },
+  { key: "medium", label: "Medium", hint: "Fails a disc when the face anomaly check is over 50 % sure it is a fail" },
+  { key: "high",   label: "High",   hint: "Fails a disc when the face anomaly check is over 40 % sure it is a fail" },
 ];
 // The chip and off-centre checks — the ``ring_chip`` / ``ring_offset``
 // kwargs. Mirror CHIP_MODES / OFFSET_MODES in actions.py.
@@ -498,7 +498,7 @@ function bodyHtml(st) {
       </div>
     </div>
     <div class="card">
-      <h4>Face — how sure the face check must be that the disc is a fail</h4>
+      <h4>Face anomaly — how sure the check must be that the disc is a fail</h4>
       <div class="inner">
         <div class="row seg">${CLS_MODES.map(m =>
           `<button type="button" class="pos${st.classifier === m.key ? " armed" : ""}" data-cls="${m.key}">${esc(m.label)}</button>`).join("")}
