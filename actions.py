@@ -65,7 +65,7 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     a STUCK fail and the anode must be cleared before the
                     next placement.
   13. Sort          drop it into an OUT holder by its LANE (LANES): a
-                    reading outside the window (C_MIN..C_MAX pF, D ≤ D_MAX) → the fail holder's
+                    reading outside the window (C_MIN..C_MAX nF, D ≤ D_MAX) → the fail holder's
                     A1–A3; a camera fail → A4–A6; stuck → A7; a pass → the
                     pass holder and slot that MIRROR where it was picked
                     (in_2 A3 → out_good_2 A3).
@@ -994,9 +994,9 @@ def setup(**kwargs):
     RING_OFFSET_MODE = _mode("ring_offset", OFFSET_MODES)
     RING_OFFSET_PX = OFFSET_MODES[RING_OFFSET_MODE]
 
-    # The measurement window (Sort): pF and D from the run.
-    Sort.C_MIN = _num("c_min_pf", float) * 1e-12
-    Sort.C_MAX = _num("c_max_pf", float) * 1e-12
+    # The measurement window (Sort): nF and D from the run.
+    Sort.C_MIN = _num("c_min_nf", float) * 1e-9
+    Sort.C_MAX = _num("c_max_nf", float) * 1e-9
     Sort.D_MAX = _num("d_max", float)
 
     # Keep each visual fail's picture in the run's records (FAIL_SIDE).
@@ -1079,7 +1079,7 @@ class Start(Action):
         self.ctx.meta["pass_n"] = 0
         self.ctx.meta["fail_n"] = 0
         _publish(self, "Starting — homing", last_disc=None, last_c=None,
-                 last_c_unit=None, last_result=None)
+                 last_c_unit=None, last_d=None, last_result=None)
         thr = CLS_MODES[CLS_MODE]
         rt.step("face anomaly check: ignored — the detector must see a disc, the reading sorts"
                 if thr is None else f"face anomaly check: {CLS_MODE} — fails a disc above {thr:.0%} sure it is a fail")
@@ -1476,7 +1476,7 @@ class InspectBottom(Action):
             self.ctx.meta.setdefault("verdict", {})[disc] = why
             rt.step(f"disc {disc + 1}: {why} → fail column")
             _publish(self, f"{_tag(disc)} — failed inspection", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_result="fail")
+                     last_c=None, last_c_unit=None, last_d=None, last_result="fail")
             if ended:
                 _end_column(self, disc)
                 return "column_done"
@@ -1586,7 +1586,7 @@ class InspectTop(Action):
             self.ctx.meta.setdefault("verdict", {})[disc] = why
             rt.step(f"disc {disc + 1}: {why} → no measurement, fail column")
             _publish(self, f"{_tag(disc)} — failed inspection on the anode", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_result="fail")
+                     last_c=None, last_c_unit=None, last_d=None, last_result="fail")
             if ended:
                 _end_column(self, disc)
                 return "column_done"
@@ -1654,11 +1654,11 @@ class Measure(Action):
         # D is the meter's second reading in capacitance mode.
         self.ctx.meta.setdefault("disc_c", {})[disc] = m.primary
         self.ctx.meta.setdefault("disc_d", {})[disc] = m.secondary
-        rt.step(f"disc {disc + 1}: C = {m.primary * 1e12:.0f} pF, D = {m.secondary:.4f} "
-                f"(pass: {Sort.C_MIN * 1e12:.0f}–{Sort.C_MAX * 1e12:.0f} pF, D ≤ {Sort.D_MAX:g})")
+        rt.step(f"disc {disc + 1}: C = {m.primary * 1e9:.2f} nF, D = {m.secondary:.4f} "
+                f"(pass: {Sort.C_MIN * 1e9:g}–{Sort.C_MAX * 1e9:g} nF, D ≤ {Sort.D_MAX:g})")
         rt.count("measure", n=1)
         rt.record(_tag(disc), c_f=m.primary, c_unit=str(m.primary_unit), d=m.secondary)
-        # The value itself goes to the pendant's reading card (SI-scaled
+        # The value itself goes to the pendant's reading card (C in nF
         # there); the headline stays a step, not a number.
         _publish(self, f"{_tag(disc)} — measured",
                  last_disc=disc + 1, last_c=m.primary, last_c_unit=str(m.primary_unit), last_d=m.secondary,
@@ -1800,7 +1800,7 @@ class CheckAnode(Action):
             rt.step(f"disc {disc + 1}: a disc is STILL on the anode — this one is a stuck fail")
             rt.record(_tag(disc), anode_after_pick="occupied")
             _publish(self, f"{_tag(disc)} — anode still occupied", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_result="fail")
+                     last_c=None, last_c_unit=None, last_d=None, last_result="fail")
             return "occupied"
         rt.record(_tag(disc), anode_after_pick="clear")
         return "clear"
@@ -1813,7 +1813,7 @@ class Sort(Action):
     else fail_measure). Where a disc lands by verdict is _lane (module
     level, shared with Reject)."""
     # The window — farads, and D unitless. setup() writes them from the
-    # run's c_min_pf / c_max_pf / d_max (hmi/default.j2, the setup screen's
+    # run's c_min_nf / c_max_nf / d_max (hmi/default.j2, the setup screen's
     # Measurement step); these are hmi/default.j2's defaults.
     C_MIN = 34000e-12
     C_MAX = 41000e-12
@@ -1864,7 +1864,7 @@ class Sort(Action):
                 return False
             d = self.ctx.meta.get("disc_d", {}).get(disc)
             inside = self.inside(c, d)
-            lane, why = ("pass" if inside else "fail_measure"), f"C = {c * 1e12:.0f} pF, D = {d:.4f}"
+            lane, why = ("pass" if inside else "fail_measure"), f"C = {c * 1e9:.2f} nF, D = {d:.4f}"
         return "sorted" if _drop(self, disc, lane, why) else False
 
 

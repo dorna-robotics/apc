@@ -10,7 +10,7 @@ a stack, the earlier it came through.
 ## Pass 1, Pass 2 — the good discs
 
 A disc passed by both cameras whose measurement is inside the window:
-capacitance between the run's `c_min_pf` and `c_max_pf` (34,000–41,000 pF
+capacitance between the run's `c_min_nf` and `c_max_nf` (34–41 nF
 by default) and dissipation factor D at most `d_max` (0.02) — the setup
 screen's Measurement step (`Sort`, `actions.py`).
 
@@ -120,4 +120,4 @@ sheet has no `visual_card`; `reason` still says why each disc failed.
 
 Set in `actions.py`: the fail lanes (`LANES`), the pass mirror (`_lane`), the blow tries (`ClearAnode.MAX_BLOWS`), the empties
 that end a position (`EMPTY_RUN_ENDS_COLUMN`). The stack size and the
-measurement window (`c_min_pf`, `c_max_pf`, `d_max`) are in `hmi/default.j2`.
+measurement window (`c_min_nf`, `c_max_nf`, `d_max`) are in `hmi/default.j2`.

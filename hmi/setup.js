@@ -314,15 +314,15 @@ function initial(api, key, fallback) {
   return fallback;
 }
 
-// The Measurement step's sliders — the ``c_min_pf`` / ``c_max_pf`` /
+// The Measurement step's sliders — the ``c_min_nf`` / ``c_max_nf`` /
 // ``d_max`` kwargs (Sort in actions.py). The ranges are what the screen
 // offers; the defaults live in hmi/default.j2.
-const C_RANGE = { min: 20000, max: 60000, step: 100 };      // pF
+const C_RANGE = { min: 20, max: 60, step: 0.1 };           // nF
 const D_RANGE = { min: 0, max: 0.1, step: 0.001 };
-const pfTxt = v => Math.round(v).toLocaleString("en-US");
-const cHint = st => `Fails a disc with C below ${pfTxt(st.c_min_pf)} pF or above ${pfTxt(st.c_max_pf)} pF`;
+const nfTxt = v => v.toFixed(1);
+const cHint = st => `Fails a disc with C below ${nfTxt(st.c_min_nf)} nF or above ${nfTxt(st.c_max_nf)} nF`;
 const dHint = st => `Fails a disc with D above ${st.d_max.toFixed(3)}`;
-const cOut = st => `${pfTxt(st.c_min_pf)} – ${pfTxt(st.c_max_pf)} pF`;
+const cOut = st => `${nfTxt(st.c_min_nf)} – ${nfTxt(st.c_max_nf)} nF`;
 const dOut = st => `≤ ${st.d_max.toFixed(3)}`;
 const frac = (v, r) => Math.min(1, Math.max(0, (v - r.min) / (r.max - r.min)));
 // One track: two thumbs (lo, hi) for a window, one (hi) for a maximum —
@@ -351,16 +351,16 @@ export function benchState(api) {
                ring_offset: pick(initial(api, "ring_offset", "medium"), OFFSET_MODES),
                // keep each visual fail's picture in the run's records
                save_fail_pictures: initial(api, "save_fail_pictures", false) === true,
-               // the measurement window (hmi/default.j2): pF, pF, D
-               c_min_pf: Number(initial(api, "c_min_pf", 34000)),
-               c_max_pf: Number(initial(api, "c_max_pf", 41000)),
+               // the measurement window (hmi/default.j2): nF, nF, D
+               c_min_nf: Number(initial(api, "c_min_nf", 34)),
+               c_max_nf: Number(initial(api, "c_max_nf", 41)),
                d_max: Number(initial(api, "d_max", 0.02)),
                // the meter's open / short calibration at the start of the run
                calibrate_meter: initial(api, "calibrate_meter", true) !== false };
   // the schema's own defaults, for the Measurement step's Reset buttons
   const noValues = { schema: api && api.schema };
-  st.defaults = { c_min_pf: Number(initial(noValues, "c_min_pf", 34000)),
-                  c_max_pf: Number(initial(noValues, "c_max_pf", 41000)),
+  st.defaults = { c_min_nf: Number(initial(noValues, "c_min_nf", 34)),
+                  c_max_nf: Number(initial(noValues, "c_max_nf", 41)),
                   d_max: Number(initial(noValues, "d_max", 0.02)) };
   for (const k of IN_KEYS) st.in[k] = flags(initial(api, k, []));
   const c = String(initial(api, "classifier", "medium") || "").toLowerCase();
@@ -508,7 +508,7 @@ function stepBar(st, V) {
   // final check is ticked.
   const STEPS = [
     { key: "bench",      title: "Bench",             ok: !V.errs.length },
-    { key: "measure",    title: "Measurement",       ok: st.c_min_pf < st.c_max_pf },
+    { key: "measure",    title: "Measurement",       ok: st.c_min_nf < st.c_max_nf },
     { key: "classifier", title: "Visual inspection", ok: true },
     { key: "check",      title: "Final checks",      ok: checksOk(st) },
   ];
@@ -546,7 +546,7 @@ function bodyHtml(st) {
     <div class="card">
       <h4>Capacitance (C) — the range a disc must read inside to pass</h4>
       <div class="inner">
-        ${rangeSlider("cap", C_RANGE, { key: "c_min_pf", v: st.c_min_pf }, { key: "c_max_pf", v: st.c_max_pf }, cOut(st))}
+        ${rangeSlider("cap", C_RANGE, { key: "c_min_nf", v: st.c_min_nf }, { key: "c_max_nf", v: st.c_max_nf }, cOut(st))}
         <div class="hint" id="c-hint">${esc(cHint(st))}</div>
       </div>
     </div>
@@ -682,12 +682,13 @@ function render(wrap, st) {
       if (frozen()) { inp.value = st[inp.dataset.slider]; return; }
       const k = inp.dataset.slider;
       let v = Number(inp.value);
-      if (k === "c_min_pf") v = Math.min(v, st.c_max_pf - C_RANGE.step);
-      if (k === "c_max_pf") v = Math.max(v, st.c_min_pf + C_RANGE.step);
+      if (k === "c_min_nf") v = Math.min(v, st.c_max_nf - C_RANGE.step);
+      if (k === "c_max_nf") v = Math.max(v, st.c_min_nf + C_RANGE.step);
+      if (k !== "d_max") v = Number(v.toFixed(1));     // 0.1 nF steps, no float dust
       inp.value = v; st[k] = v;
       const name = inp.dataset.range, r = name === "cap" ? C_RANGE : D_RANGE;
       const dual = wrap.querySelector(`[data-dual="${name}"]`);
-      if (name === "cap") { dual.style.setProperty("--lo", frac(st.c_min_pf, r)); dual.style.setProperty("--hi", frac(st.c_max_pf, r)); }
+      if (name === "cap") { dual.style.setProperty("--lo", frac(st.c_min_nf, r)); dual.style.setProperty("--hi", frac(st.c_max_nf, r)); }
       else dual.style.setProperty("--hi", frac(st.d_max, r));
       wrap.querySelector(`[data-out="${name}"]`).textContent = name === "cap" ? cOut(st) : dOut(st);
       const h = wrap.querySelector(name === "cap" ? "#c-hint" : "#d-hint");
@@ -698,7 +699,7 @@ function render(wrap, st) {
   wrap.querySelectorAll("[data-reset]").forEach(b => {
     b.onclick = () => {
       if (frozen()) return;
-      const keys = b.dataset.reset === "cap" ? ["c_min_pf", "c_max_pf"] : ["d_max"];
+      const keys = b.dataset.reset === "cap" ? ["c_min_nf", "c_max_nf"] : ["d_max"];
       for (const k of keys) st[k] = st.defaults[k];
       render(wrap, st);
     };
@@ -792,8 +793,8 @@ export default {
       ring_chip: _st.ring_chip,
       ring_offset: _st.ring_offset,
       save_fail_pictures: _st.save_fail_pictures,
-      c_min_pf: _st.c_min_pf,
-      c_max_pf: _st.c_max_pf,
+      c_min_nf: _st.c_min_nf,
+      c_max_nf: _st.c_max_nf,
       d_max: _st.d_max,
       calibrate_meter: _st.calibrate_meter,
     };

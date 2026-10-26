@@ -289,12 +289,11 @@ const CSS = `
   border:1.5px solid ${C_STROKE}; }
 .legend i.n { background:var(--surface); border-color:var(--border); border-style:dashed; }
 
-/* the last reading — the hero number of this screen, read across the room */
+/* the last reading — C and D, the hero numbers of this screen, read across the room */
 .reading { display:flex; flex-direction:column; align-items:center; gap:var(--space-3); }
 .reading .val { font-size:44px; font-weight:700; font-variant-numeric:tabular-nums;
   font-family:ui-monospace,Menlo,Consolas,monospace; line-height:1; }
 .reading .val small { font-size:var(--text-lg); font-weight:400; opacity:.6; }
-.reading .dval { font-size:var(--text-lg); font-weight:600; font-variant-numeric:tabular-nums; opacity:.75; }
 .verdict { font-size:var(--text-md); letter-spacing:.1em; text-transform:uppercase;
   font-weight:700; padding:4px 12px; border-radius:var(--radius-sm); }
 .verdict.pass { background:${C_GOOD}; color:${C_ON}; }
@@ -308,19 +307,11 @@ const esc = s => String(s == null ? "" : s)
 // (Number(null) is 0: a cleared value would draw as a zero reading).
 const num = v => { if (v == null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 
-// A reading in the unit an operator reads off the meter: a bare farad
-// value is scaled to pF / nF / µF / mF; any other unit is shown as sent.
+// C in nF, the unit of the run's measurement window on the setup screen;
+// a unit other than a bare farad is shown as sent.
 function fmtC(c, unit) {
-  let u = String(unit || "");
-  let x = c;
-  if (u === "F" && x !== 0) {
-    const a = Math.abs(x);
-    if (a < 1e-9)      { x *= 1e12; u = "pF"; }
-    else if (a < 1e-6) { x *= 1e9;  u = "nF"; }
-    else if (a < 1e-3) { x *= 1e6;  u = "µF"; }
-    else if (a < 1)    { x *= 1e3;  u = "mF"; }
-  }
-  return { v: Number(x.toPrecision(4)), u };
+  if (String(unit || "") !== "F") return { v: String(Number(c.toPrecision(4))), u: String(unit || "") };
+  return { v: (c * 1e9).toFixed(2), u: "nF" };
 }
 
 let _root = null;
@@ -393,8 +384,8 @@ function readingHtml(v) {
   const res = v.last_result === "pass" ? "pass" : v.last_result === "fail" ? "fail" : null;
   return `<div class="reading">
     <span class="note">${disc == null ? "Last disc" : `Disc ${disc}`}</span>
-    <span class="val">${esc(fmtC(c, v.last_c_unit).v)}<small> ${esc(fmtC(c, v.last_c_unit).u)}</small></span>
-    ${num(v.last_d) == null ? "" : `<span class="dval">D ${num(v.last_d).toFixed(3)}</span>`}
+    <span class="val"><small>C </small>${esc(fmtC(c, v.last_c_unit).v)}<small> ${esc(fmtC(c, v.last_c_unit).u)}</small></span>
+    <span class="val"><small>D </small>${num(v.last_d) == null ? "—" : num(v.last_d).toFixed(3)}</span>
     ${res ? `<span class="verdict ${res}">${res === "pass" ? "Passed" : "Failed"}</span>` : ""}
   </div>`;
 }
