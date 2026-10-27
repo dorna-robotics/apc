@@ -38,10 +38,12 @@ be is the run's
 that a disc is bad before it fails it: low (over 70 %), medium (over
 50 %, the model's own call), high (over 40 %), or ignore (no
 classifier at all — the detector still has to see a disc, the
-capacitance reading alone sorts). A fail at either camera sends the disc to
-the fail column with no measurement. A disc the detector does not see
-at either camera is a fail too: the suction is never released mid-way,
-the hand goes to the fail column as if it held one.
+capacitance reading alone sorts). A fail at either camera does not stop
+the disc: every disc the bottom camera sees goes the full round — both
+cameras, then the reading — and lands by everything that failed it. A
+disc the bottom camera does not see goes straight to the fail column,
+uncounted (the suction is never released mid-way); one the top camera
+does not see on the anode is not measured.
 
 The anode is never trusted empty: `ClearAnode` images it at run start
 and after any pick that left a disc behind, blows it off from the
@@ -52,8 +54,8 @@ pauses for the operator after `ClearAnode.MAX_BLOWS` blows of
 hand a stuck fail. No disc is picked while the anode holds one (`Pick`
 needs `anode_clear`, as `PlaceAnode` does): the blow-off needs the hand
 empty. A pass lands where it was picked, mirrored: In 2 A3 → Pass 2
-A3 (`_lane`). The fail holder is lanes (`LANES`): A1–A3 capacitor
-readings outside the window, A4–A6 camera (visual) fails, A7 stuck. Two "no disc"
+A3 (`_lane`). The fail holder is lanes (`LANES`): A1–A2 a camera
+(visual) fail, A3–A4 a reading outside the window, A5–A6 both, A7 stuck. Two "no disc"
 verdicts in a row from one IN position (`EMPTY_RUN_ENDS_COLUMN`) end
 that position: its remaining discs are voided, the run moves on. These
 three are parameters at the top of `actions.py` and on `ClearAnode`.

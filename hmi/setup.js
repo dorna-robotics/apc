@@ -91,11 +91,11 @@ const pick = (v, modes) => (modes.some(m => m.key === String(v).toLowerCase()) ?
 
 // The holders, TOP TO BOTTOM as drawn. `in` rows take clicks; the rest
 // are placeholders the robot fills during the run.
-// ``lanes``: the Fail holder's three lanes, left to right, [label, wells]
-// — actions.py LANES: A1–A3 the capacitor reading outside the window,
-// A4–A6 a camera fail, A7 stuck on the anode. Drawn as a row over it.
+// ``lanes``: the Fail holder's four lanes, left to right, [label, wells]
+// — actions.py LANES: A1–A2 a camera fail, A3–A4 the reading outside the
+// window, A5–A6 both, A7 stuck on the anode. Drawn as a row over it.
 export const HOLDERS = [
-  { key: "bad_1",  label: "Fail",   in: false, lanes: [["Capacitor", 3], ["Visual", 3], ["Stuck", 1]] },
+  { key: "bad_1",  label: "Fail",   in: false, lanes: [["Visual", 2], ["Measurement", 2], ["Both", 2], ["Stuck", 1]] },
   { key: "good_2", label: "Pass 2", in: false },
   { key: "good_1", label: "Pass 1", in: false },
   { key: "in_2",   label: "In 2",   in: true  },

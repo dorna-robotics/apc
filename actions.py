@@ -28,31 +28,32 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     (vision/disc_ring.yaml) — the outer one the disc's size,
                     unchipped (ring_chip), concentric (ring_offset);
                     then CLASSIFY its face — the masked circle inside the
-                    band (vision/disc_cls.yaml). Two
-                    outcomes:
-                      pass  → on to the anode;
-                      fail  → Reject: straight to the fail column. A disc
-                              the detector does not see is a fail too —
-                              the suction is never released mid-way, the
-                              hand goes to the fail column as if it held
-                              one.
+                    band (vision/disc_cls.yaml). EVERY disc it sees
+                    goes on to the anode — pass or fail, the full round
+                    (both cameras, the reading) runs, and Sort lands it
+                    by everything that failed it. Only a disc the
+                    detector does NOT see stops here (empty): Reject
+                    takes the hand to the fail column — the suction is
+                    never released mid-way — and nothing is counted.
                     TWO empty picks IN A ROW from one IN position — seen
                     by either camera — mean that stack has run out: its
                     remaining discs are VOID (done, never created) and
                     the run moves to the next position. One empty is a
                     fail, not a verdict on the stack (a detector can
                     miss a real disc). EMPTY_RUN_ENDS_COLUMN.
-   5. Reject        (fail only) drop the held disc into the fail column.
+   5. Reject        (no disc seen only) the hand to the Visual lane,
+                    uncounted.
    6. PlaceAnode    place the disc on the anode's "place" anchor, stand
                     where the robot camera sees it.
    7. InspectTop    robot camera: the detector, then the band's two
                     circles (vision/disc_ring_top.yaml) — concentric
                     (ring_offset), no chip check (chips show from the
                     bottom) — then the classifier on the face cut inside
-                    the band's inner edge. pass → the
-                    measurement; fail → skip it, PickAnode takes the disc
-                    straight to the fail column. No disc seen on the anode
-                    is a fail too, never a pause.
+                    the band's inner edge. Pass or fail → the
+                    measurement. No disc seen on the anode → nothing to
+                    measure: PickAnode takes whatever is there to the
+                    Visual lane, counted (the bottom camera saw a disc),
+                    never a pause.
    8. CathodeDown   drive the rotating cylinder down so the cathode contacts
                     the disc (clamped anode ↔ cathode).
    9. Measure       read the multimeter: capacitance and dissipation factor D
@@ -64,11 +65,13 @@ facts (the BT moves action→action as each eff is asserted). Per disc i:
                     still on the anode, so whatever the hand holds is
                     a STUCK fail and the anode must be cleared before the
                     next placement.
-  13. Sort          drop it into an OUT holder by its LANE (LANES): a
-                    reading outside the window (C_MIN..C_MAX nF, D ≤ D_MAX) → the fail holder's
-                    A1–A3; a camera fail → A4–A6; stuck → A7; a pass → the
-                    pass holder and slot that MIRROR where it was picked
-                    (in_2 A3 → out_good_2 A3).
+  13. Sort          drop it into an OUT holder by its LANE (LANES), from
+                    everything that failed it: stuck → A7; a camera fail
+                    alone → Visual A1–A2; a reading outside the window
+                    (C_MIN..C_MAX nF, D ≤ D_MAX) alone → Measurement A3–A4;
+                    both → A5–A6; a pass on all → the pass holder and slot
+                    that MIRROR where it was picked (in_2 A3 → out_good_2
+                    A3).
 
 And TWO run-level actions. CalibrateMeter, once, after the anode is first
 seen clear and before the first disc is picked: the meter's open / short
@@ -106,8 +109,9 @@ an ordered list of (holder, slot) positions, one lane per verdict (_lane):
                   Ax, so a pass holder reads like the IN holder it came
                   from. A position holds at most MAX_PER_SLOT discs on
                   either side, so a pass position never overflows.
-  * fail_measure  out_bad_1 A1→A3 — the reading outside the window (capacitor)
-  * fail_visual   out_bad_1 A4→A6 — a camera said fail, or saw no disc
+  * fail_visual   out_bad_1 A1→A2 — a camera failed it (or saw no disc), the reading passed
+  * fail_measure  out_bad_1 A3→A4 — the reading outside the window, both cameras passed
+  * fail_both     out_bad_1 A5→A6 — a camera failed it AND the reading was outside
   * fail_stuck    out_bad_1 A7    — the anode still showed a disc after the pick
   * within a position: z starts at 0 and steps by Z_STEP per disc, up to
     MAX_PER_SLOT discs, then the lane's next position.
@@ -148,11 +152,11 @@ started      = predicate("started")
 created      = predicate("created")      # disc spawned at an in holder
 picked       = predicate("picked")       # disc in the gripper (off the in stack)
 presented    = predicate("presented")    # disc presented at the station
-inspected    = predicate("inspected")    # station camera: disc seen and PASSED
-bottom_failed = predicate("bottom_failed")  # station camera: disc seen and FAILED
+inspected    = predicate("inspected")    # station camera: disc SEEN (its verdict is ctx.meta["visual"])
+bottom_empty = predicate("bottom_empty") # station camera: NO disc seen — Reject, nothing to measure
 on_anode     = predicate("on_anode")     # disc placed on the anode
-anode_inspected = predicate("anode_inspected")  # robot camera: PASSED on the anode
-top_failed   = predicate("top_failed")   # robot camera: FAILED on the anode
+anode_inspected = predicate("anode_inspected")  # robot camera: disc SEEN on the anode (verdict: ctx.meta["visual"])
+top_empty    = predicate("top_empty")    # robot camera: NO disc on the anode — nothing to measure
 cathode_down = predicate("cathode_down") # cylinder driven down (cathode contact)
 measured     = predicate("measured")     # capacitance read for this disc
 cathode_up   = predicate("cathode_up")   # cylinder retracted
@@ -281,20 +285,23 @@ _STEPS = 13                                    # per-disc steps for progress (no
 # A lane is an ORDERED list of (holder alias, slot) positions, filled in
 # that order, MAX_PER_SLOT discs each (z stepping by Z_STEP), one lane per
 # verdict. A PASS goes to the mirror of where it was picked — in_k Ax →
-# PASS_HOLDERS[k-1] Ax, one position (_lane). The fail holder is split:
-# A1–A3 take the discs whose READING was outside the window (capacitor),
-# A4–A6 the discs a CAMERA failed (or saw no disc), A7 the discs the hand
-# held while the anode still showed one (STUCK — an extra disc came up, or
-# one stayed behind; what the hand holds is not trusted), so the kinds
-# never mix in one stack. The setup screen and the pendant label the
-# three lanes under the Fail row (hmi/setup.js, hmi/pendant.js HOLDERS
-# ``lanes``) — change one, change all. Which lane a disc takes is decided
-# in Sort / Reject; _drop only walks it.
+# PASS_HOLDERS[k-1] Ax, one position (_lane). The fail holder is split by
+# WHAT failed the disc — every disc gets both cameras and the reading:
+# A1–A2 a CAMERA failed it (or saw no disc) but the reading passed; A3–A4
+# the READING was outside the window but both cameras passed; A5–A6 BOTH
+# a camera and the reading failed it; A7 the discs the hand held while the
+# anode still showed one (STUCK — an extra disc came up, or one stayed
+# behind; what the hand holds is not trusted), so the kinds never mix in
+# one stack. The setup screen and the pendant label the four lanes under
+# the Fail row (hmi/setup.js, hmi/pendant.js HOLDERS ``lanes``) — change
+# one, change all. Which lane a disc takes is decided in Sort / Reject;
+# _drop only walks it.
 PASS_HOLDERS = ["disc_out_good_1", "disc_out_good_2"]    # in_1's mirror, in_2's mirror
 FAIL_HOLDER  = "disc_out_bad_1"
 LANES = {
-    "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[0:3]],     # A1..A3
-    "fail_visual":  [(FAIL_HOLDER, s) for s in SLOTS[3:6]],     # A4..A6
+    "fail_visual":  [(FAIL_HOLDER, s) for s in SLOTS[0:2]],     # A1..A2
+    "fail_measure": [(FAIL_HOLDER, s) for s in SLOTS[2:4]],     # A3..A4
+    "fail_both":    [(FAIL_HOLDER, s) for s in SLOTS[4:6]],     # A5..A6
     "fail_stuck":   [(FAIL_HOLDER, s) for s in SLOTS[6:7]],     # A7
 }
 
@@ -831,8 +838,8 @@ def _progress_pct(action):
 
 
 # The per-disc chain in order — what progress and the audit status read.
-_CHAIN = (created, picked, presented, inspected, bottom_failed, on_anode,
-          anode_inspected, top_failed, cathode_down, measured, cathode_up,
+_CHAIN = (created, picked, presented, inspected, bottom_empty, on_anode,
+          anode_inspected, top_empty, cathode_down, measured, cathode_up,
           off_anode, anode_checked, sorted_, void)
 
 
@@ -1071,7 +1078,7 @@ class Start(Action):
         # Fresh tallies for the pendant — a batch runs start-to-finish, and
         # None clears a reading left from the previous run (rt.op removes
         # the key).
-        for k in ("picked_from", "filled", "disc_c", "verdict"):
+        for k in ("picked_from", "filled", "disc_c", "disc_d", "visual"):
             self.ctx.meta[k] = {}
         self.ctx.meta["blow_tries"] = 0
         self.ctx.meta["empty_run"] = {}
@@ -1210,7 +1217,7 @@ class ClearAnode(Action):
 # Seconds the meter keeps measuring after it is set up, before its reading
 # is taken — the clamped disc's contact settles into the value read (the
 # meter free-runs; there is no "settled" signal to wait for).
-METER_SETTLE_S = 1.0
+METER_SETTLE_S = 2.0
 
 
 def _read_cd(rcp):
@@ -1437,15 +1444,15 @@ class Present(Action):
 class InspectBottom(Action):
     """Station camera: DETECT the held disc, check its RING (two circles,
     concentric, whole), then CLASSIFY its masked face (_face_roi)
-    (_inspect, STATION). A sensing action with two outcomes
-    (bt-framework-guide §7): ``pass`` (default) and ``fail``; the fail's
-    reason (``bottom camera: off-centre`` …) and the ring's
-    measurements go into the disc's audit row.
+    (_inspect, STATION). A sensing action (bt-framework-guide §7): ``seen``
+    (default) — pass or fail, the disc goes on to the anode for the full
+    round; a fail's reason (``bottom camera: off-centre`` …) is kept in
+    ctx.meta["visual"] for Sort, and the ring's measurements go into the
+    disc's audit row.
 
-    A disc the detector does not see is a FAIL, not a pause and not an
-    empty hand: the suction is never released mid-way, Reject carries
-    whatever the gripper holds to the fail column exactly as it would a
-    classified fail. The reason is kept for the audit row and the drop.
+    ``empty`` — the detector does not see a disc: there is nothing to
+    measure, so Reject carries whatever the gripper holds to the Visual
+    lane, uncounted (the suction is never released mid-way). Not a pause.
 
     A failed READ (camera down) returns False — the success facts are
     asserted only on a valid reading; the planner re-selects this action
@@ -1458,17 +1465,17 @@ class InspectBottom(Action):
     resource = "robot"
 
     def pre(self, disc):
-        return presented(disc) & ~inspected(disc) & ~bottom_failed(disc)
+        return presented(disc) & ~inspected(disc) & ~bottom_empty(disc)
 
     def eff(self, disc):
-        # The feed opens on a FAIL here (the disc never reaches the top
+        # The feed opens on EMPTY here (the disc never reaches the top
         # camera) and on the top camera's verdict otherwise.
-        # column_done: this disc is a fail like any other "no disc", AND the
+        # column_done: this disc is empty like any other "no disc", AND the
         # position's remaining discs are void — done, never created.
         mates = _column_mates(disc)
-        return {"pass":        (+inspected(disc),),
-                "fail":        (+bottom_failed(disc), +feed_free()),
-                "column_done": (+bottom_failed(disc), +feed_free(),
+        return {"seen":        (+inspected(disc),),
+                "empty":       (+bottom_empty(disc), +feed_free()),
+                "column_done": (+bottom_empty(disc), +feed_free(),
                                 *(f for d in mates for f in (+void(d), +done(d))))}
 
     def execute(self, disc):
@@ -1485,35 +1492,37 @@ class InspectBottom(Action):
         rt.count("inspect.bottom", **{v: 1})        # v is "pass" / "fail" / "empty"
         rt.record(_tag(disc), visual_bottom="none" if v == "empty" else v, **m)
         ended = _empty_run(self, disc, seen=(v != "empty"))
-        if v != "pass":
-            self.ctx.meta.setdefault("verdict", {})[disc] = why
-            rt.step(f"disc {disc + 1}: {why} → fail column")
-            _publish(self, f"{_tag(disc)} — failed inspection", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_d=None,
-                     last_c_min=None, last_c_max=None, last_d_max=None, last_c_out=None, last_d_out=None, last_result="fail")
+        if v == "empty":
+            self.ctx.meta.setdefault("visual", {})[disc] = [why]
+            rt.step(f"disc {disc + 1}: {why} → fail column, nothing to measure")
+            _publish(self, f"{_tag(disc)} — no disc seen")
             if ended:
                 _end_column(self, disc)
                 return "column_done"
-            return "fail"
-        return "pass"
+            return "empty"
+        if v == "fail":
+            self.ctx.meta.setdefault("visual", {}).setdefault(disc, []).append(why)
+            rt.step(f"disc {disc + 1}: {why} — on to the anode and the reading")
+            _publish(self, f"{_tag(disc)} — failed inspection, on to the reading")
+        return "seen"
 
 
 class Reject(Action):
-    """Bottom-camera fail: the held disc goes straight to the fail column."""
+    """The bottom camera saw NO disc: the hand goes to the Visual lane, the
+    drop not counted (held=False — _drop), nothing to measure."""
     params   = ["disc"]
     duration = 10
     resource = "robot"
 
     def pre(self, disc):
-        return bottom_failed(disc) & ~done(disc)
+        return bottom_empty(disc) & ~done(disc)
 
     def eff(self, disc):
         return {"rejected": (+sorted_(disc), +done(disc), +hand_empty())}
 
     def execute(self, disc):
-        why = self.ctx.meta.get("verdict", {}).get(disc, "bottom camera")
-        held = why != "bottom camera: no disc"
-        return "rejected" if _drop(self, disc, "fail_visual", why, held=held) else False
+        why = self.ctx.meta["visual"][disc][0]
+        return "rejected" if _drop(self, disc, "fail_visual", why, held=False) else False
 
 
 class PlaceAnode(Action):
@@ -1557,11 +1566,11 @@ class InspectTop(Action):
     """Robot camera: the same flow on the seated disc (_inspect, ROBOT) —
     detector, the band's two circles judged concentric (no chip check:
     chips show from the bottom), then the classifier on the face cut
-    inside the band's inner edge — before the measurement. ``pass``
-    (default) → measure; ``fail`` → the
-    measurement is skipped and PickAnode takes it to the fail column.
-    No disc seen on the anode is a fail too: PickAnode re-grips whatever
-    is there and Sort drops it in the fail column, no pause.
+    inside the band's inner edge — before the measurement. ``seen``
+    (default) — pass or fail, the disc is measured; a fail's reason joins
+    the bottom camera's in ctx.meta["visual"] for Sort. ``empty`` — no
+    disc on the anode, nothing to measure: PickAnode re-grips whatever is
+    there and Sort drops it in the Visual lane, counted, no pause.
     ``hand_empty`` in the pre keeps the arm at the anode hover: the
     planner cannot slot the next pick in between, so the camera is still
     over the anode when this runs."""
@@ -1570,15 +1579,15 @@ class InspectTop(Action):
     resource = "robot"
 
     def pre(self, disc):
-        return on_anode(disc) & hand_empty() & ~anode_inspected(disc) & ~top_failed(disc)
+        return on_anode(disc) & hand_empty() & ~anode_inspected(disc) & ~top_empty(disc)
 
     def eff(self, disc):
         # The cameras are done with this disc: the feed opens for the next
         # Create. column_done as at the bottom camera.
         mates = _column_mates(disc)
-        return {"pass":        (+anode_inspected(disc), +feed_free()),
-                "fail":        (+top_failed(disc), +feed_free()),
-                "column_done": (+top_failed(disc), +feed_free(),
+        return {"seen":        (+anode_inspected(disc), +feed_free()),
+                "empty":       (+top_empty(disc), +feed_free()),
+                "column_done": (+top_empty(disc), +feed_free(),
                                 *(f for d in mates for f in (+void(d), +done(d))))}
 
     def execute(self, disc):
@@ -1596,17 +1605,19 @@ class InspectTop(Action):
         rt.record(_tag(disc), visual_top="none" if v == "empty" else v,
                   **{f"top_{k}": x for k, x in m.items()})
         ended = _empty_run(self, disc, seen=(v != "empty"))
-        if v != "pass":
-            self.ctx.meta.setdefault("verdict", {})[disc] = why
-            rt.step(f"disc {disc + 1}: {why} → no measurement, fail column")
-            _publish(self, f"{_tag(disc)} — failed inspection on the anode", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_d=None,
-                     last_c_min=None, last_c_max=None, last_d_max=None, last_c_out=None, last_d_out=None, last_result="fail")
+        if v == "empty":
+            self.ctx.meta.setdefault("visual", {}).setdefault(disc, []).append(why)
+            rt.step(f"disc {disc + 1}: {why} → nothing to measure, fail column")
+            _publish(self, f"{_tag(disc)} — no disc on the anode")
             if ended:
                 _end_column(self, disc)
                 return "column_done"
-            return "fail"
-        return "pass"
+            return "empty"
+        if v == "fail":
+            self.ctx.meta.setdefault("visual", {}).setdefault(disc, []).append(why)
+            rt.step(f"disc {disc + 1}: {why} — on to the reading")
+            _publish(self, f"{_tag(disc)} — failed inspection on the anode, on to the reading")
+        return "seen"
 
 
 class CathodeDown(Action):
@@ -1720,9 +1731,9 @@ class PickAnode(Action):
     resource = "robot"
 
     def pre(self, disc):
-        # After the measurement, or straight after a top-camera fail (no
-        # clamp, no read). hand_empty required to re-grip.
-        return (cathode_up(disc) | top_failed(disc)) & hand_empty() & ~off_anode(disc)
+        # After the measurement, or straight after the top camera saw no
+        # disc (nothing to clamp or read). hand_empty required to re-grip.
+        return (cathode_up(disc) | top_empty(disc)) & hand_empty() & ~off_anode(disc)
 
     def eff(self, disc):
         # Disc back into the hand off the anode: hand fills, anode frees.
@@ -1739,7 +1750,7 @@ class PickAnode(Action):
 
 def _drop(action, disc, lane, why, held=True) -> bool:
     """Drop the held disc into the next position of ``lane`` (_lane —
-    pass / fail_measure / fail_stuck / fail_visual), then DELETE it — sorted discs are
+    pass / fail_visual / fail_measure / fail_both / fail_stuck), then DELETE it — sorted discs are
     terminal and never linger in the scene. Shared by Sort and Reject.
     False when the lane is full (the action fails, the run pauses).
 
@@ -1826,11 +1837,14 @@ class CheckAnode(Action):
 
 
 class Sort(Action):
-    """Drop the disc off the anode into an OUT holder: a top-camera fail
-    is bad outright; otherwise the measurement decides — the capacitance
-    inside C_MIN..C_MAX and the dissipation factor at most D_MAX (``pass``,
-    else fail_measure). Where a disc lands by verdict is _lane (module
-    level, shared with Reject)."""
+    """Drop the disc off the anode into an OUT holder by EVERYTHING that
+    failed it — the full round ran: stuck → fail_stuck; no disc on the
+    anode (nothing measured) → fail_visual; else the cameras' verdicts
+    (ctx.meta["visual"]) and the reading — the capacitance inside
+    C_MIN..C_MAX and the dissipation factor at most D_MAX: a camera fail
+    alone → fail_visual, the reading alone → fail_measure, both →
+    fail_both, neither → ``pass``. Where a disc lands by lane is _lane
+    (module level, shared with Reject)."""
     # The window — farads, and D unitless. setup() writes them from the
     # run's c_min_nf / c_max_nf / d_max (hmi/default.j2, the setup screen's
     # Measurement step); these are hmi/default.j2's defaults.
@@ -1878,11 +1892,11 @@ class Sort(Action):
     def execute(self, disc):
         rt = self.ctx.runtime
         facts = (getattr(self.ctx, "state", None) or {}).get("facts") or set()
-        verdict = self.ctx.meta.get("verdict", {}).get(disc)
+        visual = self.ctx.meta.get("visual", {}).get(disc, [])
         if (anode_stuck.name, disc) in facts:
             lane, why = "fail_stuck", "anode still occupied after the pick"
-        elif verdict is not None:
-            lane, why = "fail_visual", verdict
+        elif (top_empty.name, disc) in facts:
+            lane, why = "fail_visual", "; ".join(visual)       # nothing was measured
         else:
             c = self.ctx.meta.get("disc_c", {}).get(disc)
             if c is None:
@@ -1893,8 +1907,11 @@ class Sort(Action):
                 rt.step(f"disc {disc + 1}: no capacitance recorded — cannot sort", level="error")
                 return False
             d = self.ctx.meta.get("disc_d", {}).get(disc)
-            inside = self.inside(c, d)
-            lane, why = ("pass" if inside else "fail_measure"), f"C = {c * 1e9:.2f} nF, D = {d:.4f}"
+            reading = f"C = {c * 1e9:.2f} nF, D = {d:.4f}"
+            out = not self.inside(c, d)
+            lane = ("fail_both" if visual and out else "fail_visual" if visual
+                    else "fail_measure" if out else "pass")
+            why = "; ".join(visual + [reading])
         return "sorted" if _drop(self, disc, lane, why) else False
 
 

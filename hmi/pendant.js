@@ -81,7 +81,7 @@ const SLOTS   = Array.from({ length: SLOTS_N }, (_, i) => `A${i + 1}`);
 
 // Same table as setup.js, same order — ``lanes`` too (actions.py LANES).
 const HOLDERS = [
-  { key: "bad_1",  label: "Fail",   role: "bad",  in: false, lanes: [["Capacitor", 3], ["Visual", 3], ["Stuck", 1]] },
+  { key: "bad_1",  label: "Fail",   role: "bad",  in: false, lanes: [["Visual", 2], ["Measurement", 2], ["Both", 2], ["Stuck", 1]] },
   { key: "good_2", label: "Pass 2", role: "good", in: false },
   { key: "good_1", label: "Pass 1", role: "good", in: false },
   { key: "in_2",   label: "In 2",   role: "in",   in: true  },
