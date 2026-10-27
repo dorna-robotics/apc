@@ -1206,12 +1206,19 @@ class ClearAnode(Action):
         return "blown"
 
 
+# Seconds the meter keeps measuring after it is set up, before its reading
+# is taken — the clamped disc's contact settles into the value read (the
+# meter free-runs; there is no "settled" signal to wait for).
+METER_SETTLE_S = 1.0
+
+
 def _read_cd(rcp):
     """One reading of the clamped disc: C (``m.primary``) and D
-    (``m.secondary``). None when the meter did not answer, or answered
-    with anything but D as the second reading. In sim the reading is a
-    disc inside the default window (37 nF, D 0.01)."""
-    m = rcp["meter"].read_capacitance(sim_return=Measurement(
+    (``m.secondary``), taken ``METER_SETTLE_S`` after the meter is set up.
+    None when the meter did not answer, or answered with anything but D as
+    the second reading. In sim the reading is a disc inside the default
+    window (37 nF, D 0.01)."""
+    m = rcp["meter"].read_capacitance(settle_s=METER_SETTLE_S, sim_return=Measurement(
         primary=3.7e-8, primary_unit="F", secondary=0.01, secondary_unit="",
         function="C", frequency="1000", raw="sim,3.7e-8,0.01", secondary_function="D"))
     if m is None or m.secondary_function != "D":
