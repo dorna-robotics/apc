@@ -1079,7 +1079,8 @@ class Start(Action):
         self.ctx.meta["pass_n"] = 0
         self.ctx.meta["fail_n"] = 0
         _publish(self, "Starting — homing", last_disc=None, last_c=None,
-                 last_c_unit=None, last_d=None, last_result=None)
+                 last_c_unit=None, last_d=None, last_c_min=None, last_c_max=None,
+                 last_d_max=None, last_c_out=None, last_d_out=None, last_result=None)
         thr = CLS_MODES[CLS_MODE]
         rt.step("face anomaly check: ignored — the detector must see a disc, the reading sorts"
                 if thr is None else f"face anomaly check: {CLS_MODE} — fails a disc above {thr:.0%} sure it is a fail")
@@ -1488,7 +1489,8 @@ class InspectBottom(Action):
             self.ctx.meta.setdefault("verdict", {})[disc] = why
             rt.step(f"disc {disc + 1}: {why} → fail column")
             _publish(self, f"{_tag(disc)} — failed inspection", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_d=None, last_result="fail")
+                     last_c=None, last_c_unit=None, last_d=None,
+                     last_c_min=None, last_c_max=None, last_d_max=None, last_c_out=None, last_d_out=None, last_result="fail")
             if ended:
                 _end_column(self, disc)
                 return "column_done"
@@ -1598,7 +1600,8 @@ class InspectTop(Action):
             self.ctx.meta.setdefault("verdict", {})[disc] = why
             rt.step(f"disc {disc + 1}: {why} → no measurement, fail column")
             _publish(self, f"{_tag(disc)} — failed inspection on the anode", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_d=None, last_result="fail")
+                     last_c=None, last_c_unit=None, last_d=None,
+                     last_c_min=None, last_c_max=None, last_d_max=None, last_c_out=None, last_d_out=None, last_result="fail")
             if ended:
                 _end_column(self, disc)
                 return "column_done"
@@ -1674,6 +1677,9 @@ class Measure(Action):
         # there); the headline stays a step, not a number.
         _publish(self, f"{_tag(disc)} — measured",
                  last_disc=disc + 1, last_c=m.primary, last_c_unit=str(m.primary_unit), last_d=m.secondary,
+                 # the window it was judged against, and where it fell out
+                 last_c_min=Sort.C_MIN, last_c_max=Sort.C_MAX, last_d_max=Sort.D_MAX,
+                 last_c_out=Sort.c_out(m.primary), last_d_out=Sort.d_out(m.secondary),
                  last_result="pass" if Sort.inside(m.primary, m.secondary) else "fail")
         return "measured"
 
@@ -1812,7 +1818,8 @@ class CheckAnode(Action):
             rt.step(f"disc {disc + 1}: a disc is STILL on the anode — this one is a stuck fail")
             rt.record(_tag(disc), anode_after_pick="occupied")
             _publish(self, f"{_tag(disc)} — anode still occupied", last_disc=disc + 1,
-                     last_c=None, last_c_unit=None, last_d=None, last_result="fail")
+                     last_c=None, last_c_unit=None, last_d=None,
+                     last_c_min=None, last_c_max=None, last_d_max=None, last_c_out=None, last_d_out=None, last_result="fail")
             return "occupied"
         rt.record(_tag(disc), anode_after_pick="clear")
         return "clear"
@@ -1835,7 +1842,18 @@ class Sort(Action):
     def inside(cls, c, d):
         """A reading inside the window: capacitance between C_MIN and
         C_MAX, D at most D_MAX."""
-        return cls.C_MIN <= c <= cls.C_MAX and d <= cls.D_MAX
+        return not cls.c_out(c) and not cls.d_out(d)
+
+    @classmethod
+    def c_out(cls, c):
+        """Where C falls outside the window: "below" C_MIN, "above" C_MAX,
+        or "" inside it."""
+        return "below" if c < cls.C_MIN else "above" if c > cls.C_MAX else ""
+
+    @classmethod
+    def d_out(cls, d):
+        """"above" when D is over D_MAX, "" otherwise."""
+        return "above" if d > cls.D_MAX else ""
     # The place into ANY out holder (good and bad — Sort and Reject both
     # drop through _drop):
     #   soft_approach=True  stop at the gap above the slot and take the

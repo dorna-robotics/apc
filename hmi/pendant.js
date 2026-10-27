@@ -24,6 +24,9 @@
 //   last_disc    number of the disc last measured
 //   last_c       its capacitance           last_c_unit  the meter's unit
 //   last_d       its dissipation factor D
+//   last_c_min / last_c_max / last_d_max  the window it was judged against
+//   last_c_out   "below" | "above" | ""   where C fell out of it (Sort.c_out)
+//   last_d_out   "above" | ""             where D fell out of it (Sort.d_out)
 //   last_result  "pass" | "fail"
 //   inspection   the LAST inspection, either camera (actions.py _inspect):
 //                {cam, disc, verdict, why, det {conf, box}, outer / inner
@@ -294,6 +297,11 @@ const CSS = `
 .reading .val { font-size:44px; font-weight:700; font-variant-numeric:tabular-nums;
   font-family:ui-monospace,Menlo,Consolas,monospace; line-height:1; }
 .reading .val small { font-size:var(--text-lg); font-weight:400; opacity:.6; }
+/* under each value its pass window; a value out of it is red — why the
+   disc failed, at a glance */
+.reading .val.out { color:var(--red); }
+.reading .lim { font-size:var(--text-md); font-variant-numeric:tabular-nums; opacity:.7;
+  margin-top:calc(-1 * var(--space-2)); }
 .verdict { font-size:var(--text-md); letter-spacing:.1em; text-transform:uppercase;
   font-weight:700; padding:4px 12px; border-radius:var(--radius-sm); }
 .verdict.pass { background:${C_GOOD}; color:${C_ON}; }
@@ -377,6 +385,19 @@ function benchHtml(v) {
   return h;
 }
 
+// The pass window under each value, in the value's own unit.
+function cLimHtml(v) {
+  const lo = num(v.last_c_min), hi = num(v.last_c_max);
+  if (lo == null || hi == null) return "";
+  const f = x => fmtC(x, v.last_c_unit);
+  return `<span class="lim">${esc(f(lo).v)} – ${esc(f(hi).v)} ${esc(f(hi).u)}</span>`;
+}
+function dLimHtml(v) {
+  const hi = num(v.last_d_max);
+  if (hi == null) return "";
+  return `<span class="lim">≤ ${hi.toFixed(3)}</span>`;
+}
+
 function readingHtml(v) {
   const c = num(v.last_c);
   if (c == null) return `<div class="note">No reading yet.</div>`;
@@ -384,8 +405,10 @@ function readingHtml(v) {
   const res = v.last_result === "pass" ? "pass" : v.last_result === "fail" ? "fail" : null;
   return `<div class="reading">
     <span class="note">${disc == null ? "Last disc" : `Disc ${disc}`}</span>
-    <span class="val"><small>C </small>${esc(fmtC(c, v.last_c_unit).v)}<small> ${esc(fmtC(c, v.last_c_unit).u)}</small></span>
-    <span class="val"><small>D </small>${num(v.last_d) == null ? "—" : num(v.last_d).toFixed(3)}</span>
+    <span class="val${v.last_c_out ? " out" : ""}"><small>C </small>${esc(fmtC(c, v.last_c_unit).v)}<small> ${esc(fmtC(c, v.last_c_unit).u)}</small></span>
+    ${cLimHtml(v)}
+    <span class="val${v.last_d_out ? " out" : ""}"><small>D </small>${num(v.last_d) == null ? "—" : num(v.last_d).toFixed(3)}</span>
+    ${dLimHtml(v)}
     ${res ? `<span class="verdict ${res}">${res === "pass" ? "Passed" : "Failed"}</span>` : ""}
   </div>`;
 }
