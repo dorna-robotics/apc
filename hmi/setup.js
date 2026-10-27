@@ -360,7 +360,7 @@ export function benchState(api) {
                c_max_nf: Number(initial(api, "c_max_nf", 41)),
                d_max: Number(initial(api, "d_max", 0.02)),
                // the meter's open / short calibration at the start of the run
-               calibrate_meter: initial(api, "calibrate_meter", true) !== false };
+               calibrate_meter: initial(api, "calibrate_meter", false) === true };
   // the schema's own defaults, for the Measurement step's Reset buttons
   const noValues = { schema: api && api.schema };
   st.defaults = { c_min_nf: Number(initial(noValues, "c_min_nf", 34)),

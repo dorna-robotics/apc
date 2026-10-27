@@ -4,8 +4,9 @@ Disc capacitance sort. Each disc is picked off an IN stack, inspected
 at the vertical camera station, placed on the anode, inspected by the
 robot camera, clamped by the cathode, its capacitance read on the
 BK 879B (capacitance and dissipation factor D — the meter open / short
-calibrated at the start of the run, by the operator, while the run lowers
-the cathode on the bare anode; `calibrate_meter`), then dropped into a PASS
+calibrated at the start of the run when `calibrate_meter` is on (off by
+default), by the operator, while the run lowers the cathode on the bare
+anode), then dropped into a PASS
 or FAIL holder by the run's measurement window (`c_min_nf`..`c_max_nf`,
 `d_max`; `Sort` in `actions.py`). A FLAT BT project: one disc
 through the bench at a time, `ROUTE` at the bottom of `actions.py`.

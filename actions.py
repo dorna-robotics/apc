@@ -627,7 +627,7 @@ _CARD = _CardWorker()
 # only the square is decoded.
 FAIL_SIDE = 800
 SAVE_FAIL_PICTURES = False
-CALIBRATE_METER = True      # the run's calibrate_meter (CalibrateMeter)
+CALIBRATE_METER = False     # the run's calibrate_meter (CalibrateMeter)
 
 
 def _fail_name(card):

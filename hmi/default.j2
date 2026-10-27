@@ -51,8 +51,9 @@ d_max: 0.02
 # (CalibrateMeter in actions.py): the run sets the meter up, lifts and
 # lowers the cathode on the bare anode, and waits while the operator
 # presses REL on the meter. The meter keeps a calibration until it is
-# switched off; false skips it.
-calibrate_meter: true
+# switched off; false (the default) skips it — turn it on after the meter
+# was switched off.
+calibrate_meter: false
 
 # Classifier sensitivity — how sure the model must be that a disc is BAD
 # before it fails it: low (over 70 %), medium (over 50 %, the model's own

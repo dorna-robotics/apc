@@ -3,7 +3,8 @@
 The meter's open / short calibration, done at the start of a run. The run
 moves the cathode and waits; you press the buttons on the meter.
 
-Turn it on or off on the setup screen: **Measurement → Meter calibration**.
+Turn it on or off on the setup screen: **Measurement → Meter calibration**
+(Off by default).
 The calibration lasts until the meter is switched off, so after a power
 cycle, run with Meter calibration **On**.
 
