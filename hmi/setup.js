@@ -260,10 +260,13 @@ export const CSS = kitCss + wellCss({
 /* the Measurement step's sliders: one track (two thumbs for a window,
    one for a maximum), the value, Reset — one row. The filled part is what
    passes. The two inputs lie on the same track; only their thumbs take
-   the pointer, so each thumb can be dragged where it sits. */
-.hmi .slide { display:grid; grid-template-columns:minmax(0, 1fr) 190px auto; align-items:center;
+   the pointer, so each thumb can be dragged where it sits. The value
+   fields beside it take the same numbers typed. */
+.hmi .slide { display:grid; grid-template-columns:minmax(0, 1fr) auto auto; align-items:center;
   gap:var(--space-4); width:min(720px, 100%); }
-.hmi .slide .sl-v { font-variant-numeric:tabular-nums; font-weight:700; text-align:right; white-space:nowrap; }
+.hmi .slide .sl-v { display:flex; align-items:center; justify-content:flex-end; gap:var(--space-2);
+  font-variant-numeric:tabular-nums; font-weight:700; white-space:nowrap; }
+.hmi .slide .sl-v input { width:84px; text-align:right; font-weight:700; }
 .hmi .dual { position:relative; height:28px; --t:18px; }
 .hmi .dual .track, .hmi .dual .fill { position:absolute; top:50%; height:6px; margin-top:-3px; border-radius:3px; }
 .hmi .dual .track { left:calc(var(--t) / 2); right:calc(var(--t) / 2); background:var(--surface3, var(--border)); }
@@ -281,6 +284,7 @@ export const CSS = kitCss + wellCss({
 .hmi .dual input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow:var(--glow); }
 .hmi[data-frozen="1"] .dual input[type=range]::-webkit-slider-thumb { cursor:not-allowed; }
 .hmi[data-frozen="1"] .dual { opacity:.6; }
+.hmi[data-frozen="1"] .slide .sl-v input { pointer-events:none; opacity:.6; }
 .hmi[data-frozen="1"] .check { cursor:default; }
 `;
 
@@ -317,25 +321,25 @@ function initial(api, key, fallback) {
 // The Measurement step's sliders — the ``c_min_nf`` / ``c_max_nf`` /
 // ``d_max`` kwargs (Sort in actions.py). The ranges are what the screen
 // offers; the defaults live in hmi/default.j2.
-const C_RANGE = { min: 20, max: 60, step: 0.1 };           // nF
-const D_RANGE = { min: 0, max: 0.1, step: 0.001 };
-const nfTxt = v => v.toFixed(1);
+const C_RANGE = { min: 20, max: 60, step: 0.1, dp: 1 };     // nF
+const D_RANGE = { min: 0, max: 0.1, step: 0.001, dp: 3 };
+const nfTxt = v => v.toFixed(C_RANGE.dp);
 const cHint = st => `Fails a disc with C below ${nfTxt(st.c_min_nf)} nF or above ${nfTxt(st.c_max_nf)} nF`;
 const dHint = st => `Fails a disc with D above ${st.d_max.toFixed(3)}`;
-const cOut = st => `${nfTxt(st.c_min_nf)} – ${nfTxt(st.c_max_nf)} nF`;
-const dOut = st => `≤ ${st.d_max.toFixed(3)}`;
 const frac = (v, r) => Math.min(1, Math.max(0, (v - r.min) / (r.max - r.min)));
 // One track: two thumbs (lo, hi) for a window, one (hi) for a maximum —
 // the filled part is what passes. ``--lo`` / ``--hi`` (0..1) place it.
-function rangeSlider(name, r, lo, hi, out) {
+function rangeSlider(name, r, lo, hi, unit) {
   const thumb = (key, v, label) => `<input type="range" data-slider="${key}" data-range="${name}"
     min="${r.min}" max="${r.max}" step="${r.step}" value="${v}" aria-label="${esc(label)}">`;
+  const field = (key, v, label) => `<input type="number" data-num="${key}" data-range="${name}"
+    min="${r.min}" max="${r.max}" step="${r.step}" value="${v.toFixed(r.dp)}" aria-label="${esc(label)}">`;
   return `<div class="slide">
     <div class="dual" data-dual="${name}" style="--lo:${lo ? frac(lo.v, r) : 0};--hi:${frac(hi.v, r)}">
       <div class="track"></div><div class="fill"></div>
       ${lo ? thumb(lo.key, lo.v, "Minimum") : ""}${thumb(hi.key, hi.v, "Maximum")}
     </div>
-    <span class="sl-v" data-out="${name}">${esc(out)}</span>
+    <span class="sl-v">${lo ? `${field(lo.key, lo.v, "Minimum")} –` : "≤"} ${field(hi.key, hi.v, "Maximum")}${unit ? ` ${esc(unit)}` : ""}</span>
     <button type="button" class="reset" data-reset="${name}">Reset</button>
   </div>`;
 }
@@ -546,14 +550,14 @@ function bodyHtml(st) {
     <div class="card">
       <h4>Capacitance (C) — the range a disc must read inside to pass</h4>
       <div class="inner">
-        ${rangeSlider("cap", C_RANGE, { key: "c_min_nf", v: st.c_min_nf }, { key: "c_max_nf", v: st.c_max_nf }, cOut(st))}
+        ${rangeSlider("cap", C_RANGE, { key: "c_min_nf", v: st.c_min_nf }, { key: "c_max_nf", v: st.c_max_nf }, "nF")}
         <div class="hint" id="c-hint">${esc(cHint(st))}</div>
       </div>
     </div>
     <div class="card">
       <h4>Dissipation factor (D) — the most a disc may read to pass</h4>
       <div class="inner">
-        ${rangeSlider("d", D_RANGE, null, { key: "d_max", v: st.d_max }, dOut(st))}
+        ${rangeSlider("d", D_RANGE, null, { key: "d_max", v: st.d_max }, "")}
         <div class="hint" id="d-hint">${esc(dHint(st))}</div>
       </div>
     </div>
@@ -675,8 +679,8 @@ function render(wrap, st) {
       if (seg) seg.classList.toggle("done", checksOk(st));
     };
   });
-  // A slider moves its own number as it drags (no redraw: a redraw would
-  // drop the thumb mid-drag); min and max of the capacitance keep apart.
+  // A slider moves its own value field as it drags (no redraw: a redraw
+  // would drop the thumb mid-drag); min and max of the capacitance keep apart.
   wrap.querySelectorAll("input[data-slider]").forEach(inp => {
     inp.oninput = () => {
       if (frozen()) { inp.value = st[inp.dataset.slider]; return; }
@@ -684,15 +688,32 @@ function render(wrap, st) {
       let v = Number(inp.value);
       if (k === "c_min_nf") v = Math.min(v, st.c_max_nf - C_RANGE.step);
       if (k === "c_max_nf") v = Math.max(v, st.c_min_nf + C_RANGE.step);
-      if (k !== "d_max") v = Number(v.toFixed(1));     // 0.1 nF steps, no float dust
-      inp.value = v; st[k] = v;
       const name = inp.dataset.range, r = name === "cap" ? C_RANGE : D_RANGE;
+      v = Number(v.toFixed(r.dp));                      // the step's decimals, no float dust
+      inp.value = v; st[k] = v;
       const dual = wrap.querySelector(`[data-dual="${name}"]`);
       if (name === "cap") { dual.style.setProperty("--lo", frac(st.c_min_nf, r)); dual.style.setProperty("--hi", frac(st.c_max_nf, r)); }
       else dual.style.setProperty("--hi", frac(st.d_max, r));
-      wrap.querySelector(`[data-out="${name}"]`).textContent = name === "cap" ? cOut(st) : dOut(st);
+      wrap.querySelector(`input[data-num="${k}"]`).value = v.toFixed(r.dp);
       const h = wrap.querySelector(name === "cap" ? "#c-hint" : "#d-hint");
       if (h) h.textContent = name === "cap" ? cHint(st) : dHint(st);
+    };
+  });
+  // A value field: the number typed, applied on Enter or on leaving the
+  // field — rounded to the slider's step, kept on its track, min below max.
+  // Anything not a number puts the field back.
+  wrap.querySelectorAll("input[data-num]").forEach(inp => {
+    inp.onkeydown = e => { if (e.key === "Enter") inp.blur(); };
+    inp.onchange = () => {
+      const k = inp.dataset.num, r = inp.dataset.range === "cap" ? C_RANGE : D_RANGE;
+      let v = inp.value === "" ? NaN : Number(inp.value);
+      if (!frozen() && Number.isFinite(v)) {
+        v = Math.min(r.max, Math.max(r.min, v));
+        if (k === "c_min_nf") v = Math.min(v, st.c_max_nf - r.step);
+        if (k === "c_max_nf") v = Math.max(v, st.c_min_nf + r.step);
+        st[k] = Number(v.toFixed(r.dp));
+      }
+      render(wrap, st);
     };
   });
   // Reset: back to the project's defaults (hmi/default.j2)

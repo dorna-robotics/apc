@@ -1090,11 +1090,16 @@ class Start(Action):
         # True, so calling it every Start is cheap. A homing failure is
         # FATAL: return the reserved "killed" outcome — the runtime is
         # killed on the spot, nothing else runs, no motion ever happens
-        # on the unhomed rail. The operator must Reset / re-Launch.
+        # on the unhomed rail. The step says why, in the robot's own
+        # words (its device state after the homing — an alarm, an
+        # E-stop, a lost link), and what to do; the platform then says
+        # the run is killed. The operator must Kill and Launch.
         if core.has_rail:
             rt.step("homing rail")
             if not rcp["robot"].set_axis_with_stop(core.rail_cfg):
-                rt.step("homing failed")
+                rt.step(f"Homing the rail failed — robot {core.dorna.state}: {core.dorna.msg or 'no message'}. "
+                        "Release the E-stop and clear the robot (Disable alarm), then Kill and Launch.",
+                        level="error")
                 return "killed"
         # The cathode UP before anything is placed on the anode: a run
         # killed between CathodeDown and CathodeUp, or an operator's
