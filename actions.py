@@ -915,10 +915,8 @@ def _pos(holder, slot):
 
 def _publish(action, headline=None, active=None, **extra):
     """Push the operator-facing picture to the pendant. Replace semantics
-    per key (Runtime.op); observability never blocks the workflow.
-    ``notice=dict(level, title, text)`` puts a card on the pendant that
-    needs the operator (level: warning | error | info); it is cleared
-    by the next publish without one."""
+    per key (Runtime.op); observability never blocks the workflow. A
+    request to the operator is rt.notice, not a value here."""
     meta = action.ctx.meta
     vals = dict(
         in_stacks=_in_states(LOADED, meta.get("picked_from", {}), active,
@@ -934,9 +932,6 @@ def _publish(action, headline=None, active=None, **extra):
     )
     if headline is not None:
         vals["headline"] = headline
-    # The notice card: sent on EVERY publish — None removes the key
-    # (Runtime.op), so a card stays up exactly until the next picture.
-    vals["notice"] = extra.pop("notice", None)
     vals.update(extra)
     action.ctx.runtime.op(**vals)
 
@@ -1189,17 +1184,16 @@ class ClearAnode(Action):
         if not found:
             self.ctx.meta["blow_tries"] = 0
             rt.step("anode: clear")
-            _publish(self, "Anode clear")          # also takes down the blocked card after a Resume
+            _publish(self, "Anode clear")
             return "clear"
         tries = self.ctx.meta.get("blow_tries", 0)
         if tries >= self.MAX_BLOWS:
             self.ctx.meta["blow_tries"] = 0
             rt.step(f"anode: still holds a disc after {tries} blows — clear the anode by hand, "
                     f"then Resume", level="warning")
-            _publish(self, "Anode blocked — clear it, then Resume",
-                     notice=dict(level="warning", title="Anode blocked",
-                                 text=f"A disc is still on the anode after {tries} blows. "
-                                      f"Clear the anode by hand."))
+            _publish(self, "Anode blocked — clear it, then Resume")
+            rt.notice("Anode blocked", f"A disc is still on the anode after {tries} blows. "
+                                       f"Clear the anode by hand.")
             rt.pause()
             rt.checkpoint()           # blocks until Resume; then this action runs again
             return False
@@ -1269,8 +1263,8 @@ class CalibrateMeter(Action):
         """Pause on a pendant notice until the operator presses Resume."""
         rt = self.ctx.runtime
         rt.step(f"meter calibration: {title} — {text}")
-        _publish(self, f"Meter calibration — {title}",
-                 notice=dict(level="info", title=f"Meter calibration — {title}", text=text))
+        _publish(self, f"Meter calibration — {title}")
+        rt.notice(f"Meter calibration — {title}", text, level="info")
         rt.pause()
         rt.checkpoint()
 
@@ -1297,7 +1291,7 @@ class CalibrateMeter(Action):
         ws.components[self.CYLINDER].disable()
         _read_cd(rcp)                         # takes remote control back
         rt.step("meter calibration: done")
-        _publish(self, "Meter calibrated")    # takes the notice down
+        _publish(self, "Meter calibrated")
         return "calibrated"
 
 

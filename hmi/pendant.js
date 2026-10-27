@@ -37,13 +37,8 @@
 //                rt.asset path (api.url makes it loadable), w × h the
 //                frame it is in; absent in sim. Drawn as the inspection
 //                card under the columns: four tiles over the one frame.
-//   notice       {level, title, text} | absent    the operator is needed
-//                (the anode blocked after MAX_BLOWS): a MODAL over the
-//                whole screen, the bench dimmed behind it. Its Dismiss
-//                button is the ONLY way to close it — a click on the
-//                backdrop does nothing — and a dismissed notice stays
-//                away until a different one arrives or the protocol
-//                publishes without one. level: warning | error | info.
+//   (the operator notice — the anode blocked, the meter calibration —
+//   is rt.notice: the platform's frame draws it, not this screen)
 //
 // A key the protocol has not published yet renders as "—", never as 0:
 // a dash says "no data", a zero would claim the bench is untouched.
@@ -119,8 +114,7 @@ const CSS = `
 .root { height:100%; }          /* the mount wrapper — the chain .host > .root > .wrap must all have height for min-height:100% to mean the pane */
 .wrap { width:100%; min-height:100%; padding:var(--space-4); container-type:inline-size;
   display:flex; }
-/* the notice card (when there is one) over the columns, as wide as they
-   are; the stack centres in the pane on both axes */
+/* the stack centres in the pane on both axes */
 .stack { display:flex; flex-direction:column; gap:var(--space-5); width:fit-content;
   max-width:100%; margin:auto; }
 /* THREE FULL-HEIGHT COLUMNS — bench | run | last measurement — as bna's
@@ -176,41 +170,6 @@ const CSS = `
 .insp .cap .st { margin-left:auto; font-size:var(--text-xs); font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
 .insp .st.ok { color:var(--green); } .insp .st.bad { color:var(--red); } .insp .st.off { color:var(--muted); }
 
-/* the notice: the operator is needed — a modal over the whole screen.
-   The host is the pane; the backdrop fills it and dims the bench, the
-   dialog sits in the middle, in the frame's own warning voice. The
-   control rail under the pane stays reachable: the Resume it names
-   is there. */
-:host { position:relative; }
-.modal-bg { position:absolute; inset:0; z-index:10; display:flex; align-items:center;
-  justify-content:center; padding:var(--space-6); background:rgba(0,0,0,.5); }
-.modal { width:min(560px, 100%); background:var(--surface); border-radius:var(--radius-lg);
-  box-shadow:0 12px 48px rgba(0,0,0,.4); padding:var(--space-6) 32px 28px;
-  display:flex; flex-direction:column; align-items:center; gap:var(--space-3);
-  text-align:center; border-top:5px solid var(--amber);
-  animation:notice-in var(--motion-med) var(--ease) both; }
-@keyframes notice-in { from { transform:scale(.96); opacity:0; } to { transform:none; opacity:1; } }
-@media (prefers-reduced-motion: reduce) { .modal { animation:none; } }
-.modal .ico { width:64px; height:64px; border-radius:50%; display:flex; align-items:center;
-  justify-content:center; background:rgba(255,159,10,.15); color:var(--amber); margin-bottom:var(--space-2); }
-.modal .ico svg { width:34px; height:34px; }
-.modal .nl { font-size:var(--text-sm); letter-spacing:.14em; text-transform:uppercase;
-  font-weight:700; color:var(--amber); }
-.modal h2 { margin:0; font-size:26px; font-weight:700; line-height:1.2; }
-.modal p { margin:var(--space-2) 0 0; font-size:var(--text-lg); line-height:1.45; opacity:.9; }
-.modal .hint { margin-top:var(--space-4); font-size:var(--text-md); opacity:.7; }
-.modal .hint b { font-weight:700; opacity:1; }
-.modal .ack { margin-top:var(--space-5); padding:10px 26px; border-radius:var(--radius-sm);
-  border:1px solid var(--border); background:transparent; color:var(--text); font:inherit;
-  font-size:var(--text-md); font-weight:600; letter-spacing:.02em; cursor:pointer; }
-.modal .ack:hover { background:rgba(127,127,127,.12); }
-.modal .ack:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-.modal[data-level="error"] { border-top-color:var(--red); }
-.modal[data-level="error"] .ico { background:rgba(255,69,58,.15); color:var(--red); }
-.modal[data-level="error"] .nl { color:var(--red); }
-.modal[data-level="info"] { border-top-color:var(--accent); }
-.modal[data-level="info"] .ico { background:rgba(10,132,255,.15); color:var(--accent); }
-.modal[data-level="info"] .nl { color:var(--accent); }
 
 /* cards — the title top-left in grey caps (bna's), the content centred
    under it */
@@ -324,14 +283,7 @@ function fmtC(c, unit) {
 
 let _root = null;
 let _api = null;
-let _last = {};          // the values last drawn — Dismiss redraws them
 let _insp = { key: null, el: null };   // the inspection card, built once per inspection
-let _ack = null;         // the notice the operator dismissed (its key), or null
-
-// A notice's identity: the same words are the same notice. Dismissed
-// once, it stays away until a DIFFERENT one arrives; gone from the
-// values (the protocol moved on), the slate is clean again.
-const noticeKey = n => JSON.stringify([n.level, n.title, n.text]);
 
 function benchHtml(v) {
   const ins   = (v.in_stacks  && typeof v.in_stacks  === "object") ? v.in_stacks  : {};
@@ -429,28 +381,6 @@ function ringHtml(pct) {
   </div>`;
 }
 
-const LEVELS = { warning: "Operator needed", error: "Run stopped", info: "Notice" };
-
-function noticeHtml(n) {
-  if (!n || typeof n !== "object") { _ack = null; return ""; }
-  if (noticeKey(n) === _ack) return "";
-  const level = LEVELS[n.level] ? n.level : "warning";
-  return `<div class="modal-bg"><div class="modal" data-level="${level}" role="alertdialog" aria-live="assertive">
-    <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
-      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg></div>
-    <span class="nl">${esc(LEVELS[level])}</span>
-    <h2>${esc(n.title || "")}</h2>
-    ${n.text ? `<p>${esc(n.text)}</p>` : ""}
-    <div class="hint">Then press <b>Resume</b> on the bar below.</div>
-    <button type="button" class="ack">Dismiss</button>
-  </div></div>`;
-}
-
-// Draw, and wire the one control this screen has: Dismiss. The backdrop
-// has no handler on purpose — a stray tap on the bench must not take the
-// notice away.
 // ── the inspection card ───────────────────────────────────────────────
 const IC = { outer: "#ff9f0a", inner: "#0a84ff", whole: "#30d158", miss: "#ff453a", box: "#0a84ff" };
 
@@ -589,25 +519,17 @@ function inspectionEl(c) {
 }
 
 function render(v) {
-  _last = v || {};
-  _root.innerHTML = html(_last);
+  _root.innerHTML = html(v);
   const slot = _root.querySelector("#insp-slot");
-  const card = inspectionEl(_last.inspection);
+  const card = inspectionEl(v.inspection);
   if (slot && card) slot.replaceWith(card);
   else if (slot) slot.remove();
-  const ack = _root.querySelector(".modal .ack");
-  if (ack) ack.addEventListener("click", () => {
-    const n = _last.notice;
-    if (n && typeof n === "object") _ack = noticeKey(n);
-    render(_last);
-  });
 }
 
 function html(v) {
   const p = num(v.progress);
   const pct = p == null ? null : Math.max(0, Math.min(100, Math.round(p)));
   return `
-  ${noticeHtml(v.notice)}
   <div class="wrap">
    <div class="stack">
     <div class="cols">
@@ -659,12 +581,11 @@ export default {
     _root = document.createElement("div");
     _root.className = "root";
     root.appendChild(_root);
-    _api = api || null;
-    render(api && api.values ? api.values : {});
+    _api = api;
+    render(api.values);
   },
 
   update(values) {
-    if (!_root) return;
-    render(values || {});
+    render(values);
   },
 };
