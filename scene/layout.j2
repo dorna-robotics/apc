@@ -180,13 +180,22 @@ pole_144mm_1:
     child_anchor: "hole_0"
     offset: [0, 0, 0, 0, 0, 0]
 
+# The vision server both cameras' detections run on — its own device card
+# (a failed capture or detection puts it down; Recover there). Declared
+# above the cameras that name it.
+vision_server_1:
+  type: "vision_server"
+  ip: "{{ bench.vision_ip }}"
+  port: {{ bench.vision_port }}
+  simulation: {{ bench.sim }}
+  critical: true
+
 inspection_poe_vertical_1:
   type: "inspection_poe_vertical"
   simulation: {{ bench.sim }}
   camera_cfg:
+    server: "vision_server_1"
     serial_number: "{{ bench.camera_serial_station }}"
-    ip: "{{ bench.vision_ip }}"
-    port: {{ bench.vision_port }}
   anchors:
     body:
       # component bakes place at lens + 70; this bench presents at
@@ -218,9 +227,8 @@ inspection_poe_robot_1:
   # with the wrist, blocks the world and non-adjacent links, and is never
   # a self-hit against the wrist — one body.
   camera_cfg:
+    server: "vision_server_1"
     serial_number: "{{ bench.camera_serial_robot }}"
-    ip: "{{ bench.vision_ip }}"
-    port: {{ bench.vision_port }}
   attach:
     parent_name: "core"
     parent_solid: "robot_A5"

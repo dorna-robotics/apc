@@ -1179,7 +1179,7 @@ class ClearAnode(Action):
               "corners": [[700, 750], [1550, 750], [1550, 1620], [700, 1620]]}]
             if self.ctx.meta.get("blow_tries", 0) == 0 else []))
         if found is None:
-            rt.step("anode: camera read failed — recover the camera, then Resume")
+            rt.step("anode: camera read failed — Recover the vision server, then Resume")
             return False
         if not found:
             self.ctx.meta["blow_tries"] = 0
@@ -1448,11 +1448,11 @@ class InspectBottom(Action):
     measure, so Reject carries whatever the gripper holds to the Visual
     lane, uncounted (the suction is never released mid-way). Not a pause.
 
-    A failed READ (camera down) returns False — the success facts are
-    asserted only on a valid reading; the planner re-selects this action
-    after the operator recovers the camera and resumes (the scale
-    pattern, project-guide §8). A dead camera raises
-    CameraUnavailableError and pauses like any critical device.
+    A failed READ returns False — the success facts are asserted only on
+    a valid reading. The vision server's card is then down with what
+    failed (the run pauses, it is critical); after the operator's
+    Recover there and Resume, the planner re-selects this action (the
+    scale pattern, project-guide §8).
     """
     params   = ["disc"]
     duration = 8          # the detector, the ring, the classifier
@@ -1480,7 +1480,7 @@ class InspectBottom(Action):
         r = _inspect(self, STATION, disc)
         if r is None:
             rt.count("inspect.bottom", read_failed=1)
-            rt.step(f"disc {disc + 1}: inspection read failed — recover the camera, then Resume")
+            rt.step(f"disc {disc + 1}: inspection read failed — Recover the vision server, then Resume")
             return False
         v, why, m = r
         rt.count("inspect.bottom", **{v: 1})        # v is "pass" / "fail" / "empty"
@@ -1592,7 +1592,7 @@ class InspectTop(Action):
         r = _inspect(self, ROBOT, disc)
         if r is None:
             rt.count("inspect.top", read_failed=1)
-            rt.step(f"disc {disc + 1}: anode inspection failed — recover the camera, then Resume")
+            rt.step(f"disc {disc + 1}: anode inspection failed — Recover the vision server, then Resume")
             return False
         v, why, m = r
         rt.count("inspect.top", **{v: 1})           # v is "pass" / "fail" / "empty"
@@ -1817,7 +1817,7 @@ class CheckAnode(Action):
         rt.step(_progress_pct(self), level="progress")
         found = _anode_seen(self)
         if found is None:
-            rt.step(f"disc {disc + 1}: anode check read failed — recover the camera, then Resume")
+            rt.step(f"disc {disc + 1}: anode check read failed — Recover the vision server, then Resume")
             return False
         if found:
             rt.step(f"disc {disc + 1}: a disc is STILL on the anode — this one is a stuck fail")
