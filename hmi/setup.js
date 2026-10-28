@@ -203,8 +203,12 @@ export const CSS = kitCss + wellCss({
 .hmi .stepbar { display:flex; gap:var(--space-3); align-items:center; flex-wrap:wrap;
   padding-bottom:var(--space-3); margin-bottom:var(--space-4);
   border-bottom:1px solid var(--border);
-  /* stays on top while a step scrolls — the modal's body is the scroller */
-  position:sticky; top:0; z-index:5; background:var(--surface); padding-top:var(--space-2); }
+  /* stays on top while a step scrolls — the modal's body is the scroller.
+     The sticky bar rests below the scroller's top padding (the modal's
+     20 px, the pendant pane's 16 px); its own surface is painted 24 px up
+     over that strip, so nothing scrolled shows above it. */
+  position:sticky; top:0; z-index:5; background:var(--surface); padding-top:var(--space-2);
+  box-shadow:0 calc(-1 * var(--space-6)) 0 var(--surface); }
 .hmi .stepbar .grow { flex:1 1 auto; }
 .hmi .stepper { display:flex; align-items:stretch; height:38px; border-radius:999px;
   overflow:hidden; background:var(--surface); flex:none; }
