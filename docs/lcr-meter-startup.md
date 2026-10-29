@@ -20,7 +20,10 @@ Press **L/C/R/Z**.
 ## 6. Confirm capacitance mode
 Check for **C** in the top-left corner of the screen. If it is not there, press **L/C/R/Z** to cycle through modes until **C** appears.
 
-## 7. Enable USB
+## 7. Set dissipation factor display
+Press **D/Q/θ** until **D** appears in the top middle of the screen.
+
+## 8. Enable USB
 Press **USB**. **RMT** flashes in the bottom-right corner when USB is active. The meter can now be read over USB.
 
 ---
@@ -36,4 +39,5 @@ Press **USB**. **RMT** flashes in the bottom-right corner when USB is active. Th
 | Auto sleep off | Down | 5 → oFF |
 | Main screen | L/C/R/Z | Measurement screen |
 | Capacitance | L/C/R/Z (if needed) | C top left |
+| Dissipation factor | D/Q/θ (repeat as needed) | D top middle |
 | USB on | USB | RMT flashing bottom right |
