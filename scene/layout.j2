@@ -196,6 +196,10 @@ inspection_poe_vertical_1:
   camera_cfg:
     server: "vision_server_1"
     serial_number: "{{ bench.camera_serial_station }}"
+    # the image, pinned per unit (bench.j2; dev/camera/exposure.ipynb)
+    exposure: {{ bench.camera_exposure_station }}
+    gain: {{ bench.camera_gain_station }}
+    wb: {{ bench.camera_wb_station | tojson }}
   anchors:
     body:
       # component bakes place at lens + 70; this bench presents at
@@ -229,6 +233,10 @@ inspection_poe_robot_1:
   camera_cfg:
     server: "vision_server_1"
     serial_number: "{{ bench.camera_serial_robot }}"
+    # the image, pinned per unit (bench.j2; dev/camera/exposure.ipynb)
+    exposure: {{ bench.camera_exposure_robot }}
+    gain: {{ bench.camera_gain_robot }}
+    wb: {{ bench.camera_wb_robot | tojson }}
   attach:
     parent_name: "core"
     parent_solid: "robot_A5"

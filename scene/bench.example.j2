@@ -18,3 +18,18 @@
 {% set camera_serial_station = "DB1119554" %}
 {% set camera_serial_robot   = "DB1119531" %}
 {% set meter_port    = "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0" %}
+
+{# the cameras' image, pinned — never left on auto (auto meters the whole
+   frame and blows the white disc out). dev/camera/exposure.ipynb measures
+   them on a disc and prints these six lines to paste here.
+     exposure  µs        gain  dB (0 = no added noise)
+     wb        {"once": true} settles at connect | {"ratios": {"red": r,
+               "green": g, "blue": b}} pinned (1024 = unity)
+   These are starting estimates from the 24 Nov fail cards — replace them
+   with the notebook's numbers. #}
+{% set camera_exposure_station = 43000 %}
+{% set camera_gain_station     = 0 %}
+{% set camera_wb_station       = {"once": true} %}
+{% set camera_exposure_robot   = 18000 %}
+{% set camera_gain_robot       = 0 %}
+{% set camera_wb_robot         = {"once": true} %}
